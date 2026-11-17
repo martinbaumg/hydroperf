@@ -46,7 +46,7 @@ Après une modification de `web/index.html`, il suffit de renvoyer le programme 
 ## Utilisation (HydroPerf)
 
 1. Alimenter l'ESP32 : il crée le réseau Wi-Fi `HydroPerf`, ouvert (sans mot de passe). Pour en remettre un, changer `AP_PASSWORD` dans `src/hydroperf/hydroperf.cpp` (8 caractères minimum).
-2. Se connecter à ce réseau depuis un téléphone et ouvrir http://192.168.4.1.
+2. Se connecter à ce réseau depuis un téléphone et ouvrir http://hydroperf.local (ou http://192.168.4.1 si l'adresse ne répond pas, par exemple avec un « DNS privé » activé sur Android).
 3. Onglet **Sortie** : choisir le sport, le type de séance, la durée et la distance (ou « On verra comment je me sens ») et les bidons (1 à 3, taille et contenu), puis « Démarrer ».
 
 Pendant la sortie, l'ESP32 envoie une alerte à intervalle régulier (vibreur et/ou buzzer selon les réglages, LED, écran) et considère que l'athlète boit à chaque consigne. Les données de la montre et du téléphone (cœur, météo, distance) sont simulées : le Wi-Fi du boîtier n'a pas accès à Internet. L'eau et le sodium perdus sont estimés à partir du profil (transpiration, sueur plus ou moins salée), de la séance et de la météo.

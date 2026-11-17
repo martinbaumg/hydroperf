@@ -2,6 +2,8 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WebServer.h>
+#include <DNSServer.h>
+#include <ESPmDNS.h>
 #include <LittleFS.h>
 #include <sys/time.h>
 #include <initializer_list>
@@ -14,12 +16,46 @@
 const char* AP_SSID = "HydroPerf";
 // Réseau ouvert (sans mot de passe) : nullptr. Sinon un mot de passe de 8 caractères minimum
 const char* AP_PASSWORD = nullptr;
+// Adresse de l'appli : http://hydroperf.local (en plus de http://192.168.4.1)
+const char* NOM_RESEAU = "hydroperf";
 
 // web/index.html, intégré au programme par board_build.embed_files (platformio.ini)
 extern const uint8_t INDEX_HTML_DEBUT[] asm("_binary_web_index_html_start");
 extern const uint8_t INDEX_HTML_FIN[] asm("_binary_web_index_html_end");
 
+// Icônes de l'appli (web/icones), intégrées de la même façon : onglet du navigateur
+// et icône sur l'écran d'accueil de l'iPhone ("Ajouter à l'écran d'accueil")
+#define FICHIER_INTEGRE(nom)                                                   \
+  extern const uint8_t nom##_debut[] asm("_binary_web_icones_" #nom "_start"); \
+  extern const uint8_t nom##_fin[] asm("_binary_web_icones_" #nom "_end");
+FICHIER_INTEGRE(favicon_ico)
+FICHIER_INTEGRE(favicon_svg)
+FICHIER_INTEGRE(favicon_32_png)
+FICHIER_INTEGRE(apple_touch_icon_png)
+FICHIER_INTEGRE(site_webmanifest)
+FICHIER_INTEGRE(icon_192_png)
+FICHIER_INTEGRE(icon_512_png)
+
+struct Icone {
+  const char* chemin;
+  const char* type;
+  const uint8_t* debut;
+  const uint8_t* fin;
+};
+static const Icone ICONES[] = {
+  {"/favicon.ico", "image/x-icon", favicon_ico_debut, favicon_ico_fin},
+  {"/favicon.svg", "image/svg+xml", favicon_svg_debut, favicon_svg_fin},
+  {"/favicon-32.png", "image/png", favicon_32_png_debut, favicon_32_png_fin},
+  {"/apple-touch-icon.png", "image/png", apple_touch_icon_png_debut, apple_touch_icon_png_fin},
+  {"/site.webmanifest", "application/manifest+json", site_webmanifest_debut, site_webmanifest_fin},
+  {"/icon-192.png", "image/png", icon_192_png_debut, icon_192_png_fin},
+  {"/icon-512.png", "image/png", icon_512_png_debut, icon_512_png_fin},
+};
+
 WebServer server(80);
+// Les téléphones connectés au Wi-Fi HydroPerf demandent l'adresse des noms à l'ESP32 :
+// il répond 192.168.4.1 pour hydroperf.local (utile pour Android, qui gère mal le mDNS)
+DNSServer dns;
 
 static void envoyerJson(const JsonDocument& doc) {
   String texte;
@@ -97,6 +133,14 @@ static void definirRoutes() {
     server.send_P(200, "text/html; charset=utf-8", (const char*)INDEX_HTML_DEBUT,
                   INDEX_HTML_FIN - INDEX_HTML_DEBUT);
   });
+
+  for (const Icone& icone : ICONES) {
+    server.on(icone.chemin, HTTP_GET, [&icone]() {
+      // Les icônes ne changent pas : le navigateur peut les garder une semaine
+      server.sendHeader("Cache-Control", "max-age=604800");
+      server.send_P(200, icone.type, (const char*)icone.debut, icone.fin - icone.debut);
+    });
+  }
 
   server.on("/api/etat", HTTP_GET, []() {
     JsonDocument doc;
@@ -222,7 +266,12 @@ void setup() {
   }, ARDUINO_EVENT_WIFI_AP_STADISCONNECTED);
 
   if (WiFi.softAP(AP_SSID, AP_PASSWORD)) {
-    Serial.printf("Wi-Fi \"%s\" créé, appli sur http://%s\n", AP_SSID, WiFi.softAPIP().toString().c_str());
+    String domaine = String(NOM_RESEAU) + ".local";
+    dns.start(53, domaine, WiFi.softAPIP());
+    // mDNS : l'ESP32 annonce lui-même son nom (iPhone, Mac, PC)
+    if (MDNS.begin(NOM_RESEAU)) MDNS.addService("http", "tcp", 80);
+    Serial.printf("Wi-Fi \"%s\" créé, appli sur http://%s ou http://%s\n", AP_SSID, domaine.c_str(),
+                  WiFi.softAPIP().toString().c_str());
   } else {
     Serial.println("Erreur : le Wi-Fi n'a pas démarré (mot de passe de moins de 8 caractères ?)");
   }
@@ -232,6 +281,7 @@ void setup() {
 }
 
 void loop() {
+  dns.processNextRequest();
   server.handleClient();
   sortieTick();
   ecranTick();
