@@ -1,5 +1,6 @@
-// Programme de diagnostic de l'écran ST7735 (environnement PlatformIO "diag")
-//   pio run -e diag -t upload -t monitor
+// Programme de diagnostic de l'écran ST7735
+//   ESP32 :             pio run -e diag -t upload -t monitor
+//   XIAO nRF52840 :     pio run -e diag_xiao -t upload -t monitor
 // 1. Vérifie qu'aucune broche de l'écran n'est en court-circuit
 // 2. Essaie plusieurs façons de piloter l'écran : chaque mode affiche "MODE n"
 //    sur fond rouge, vert puis bleu. Le mode qui s'affiche indique la bonne config.
@@ -8,14 +9,17 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7735.h>
 
+// Broches de l'ESP32 par défaut ; les autres cartes les définissent dans platformio.ini (build_flags)
+#ifndef TFT_CS
 #define TFT_CS    5
 #define TFT_DC   16
 #define TFT_RST  17
 #define TFT_MOSI 23
 #define TFT_SCLK 18
+#endif
 
 const int PINS[] = {TFT_CS, TFT_DC, TFT_RST, TFT_MOSI, TFT_SCLK};
-const char* NOMS_PINS[] = {"CS (IO5)", "A0/DC (IO16)", "RESET (IO17)", "SDA (IO23)", "SCK (IO18)"};
+const char* NOMS_PINS[] = {"CS", "RS/DC", "RES", "SDA", "SCL"};
 const int NB_PINS = sizeof(PINS) / sizeof(PINS[0]);
 
 struct Mode {
@@ -44,7 +48,8 @@ void testerBroches() {
     delay(5);
     for (int j = i + 1; j < NB_PINS; j++) {
       if (digitalRead(PINS[j]) == HIGH) {
-        Serial.printf("  PROBLEME : court-circuit entre %s et %s\n", NOMS_PINS[i], NOMS_PINS[j]);
+        Serial.printf("  PROBLEME : court-circuit entre %s (broche %d) et %s (broche %d)\n",
+                      NOMS_PINS[i], PINS[i], NOMS_PINS[j], PINS[j]);
         probleme = true;
       }
     }
@@ -55,14 +60,14 @@ void testerBroches() {
     pinMode(PINS[i], INPUT_PULLUP);
     delay(5);
     if (digitalRead(PINS[i]) == LOW) {
-      Serial.printf("  PROBLEME : %s est reliee a GND\n", NOMS_PINS[i]);
+      Serial.printf("  PROBLEME : %s (broche %d) est reliee a GND\n", NOMS_PINS[i], PINS[i]);
       probleme = true;
     }
     pinMode(PINS[i], INPUT_PULLDOWN);
     delay(5);
     if (digitalRead(PINS[i]) == HIGH) {
-      Serial.printf("  Info : %s est tiree vers 3,3 V (normal si l'ecran a une resistance de tirage dessus)\n",
-                    NOMS_PINS[i]);
+      Serial.printf("  Info : %s (broche %d) est tiree vers 3,3 V (normal si l'ecran a une resistance de tirage dessus)\n",
+                    NOMS_PINS[i], PINS[i]);
     }
     pinMode(PINS[i], INPUT);
   }
@@ -91,13 +96,16 @@ void essayerMode(int n) {
   }
 
   delete tft;
-  // Libère IO18/IO23 pour que le mode logiciel suivant puisse les piloter
+  // Libère SCK/MOSI pour que le mode logiciel suivant puisse les piloter
   if (!mode.spiLogiciel) SPI.end();
 }
 
 void setup() {
   Serial.begin(115200);
+  // Sur la XIAO, le port série passe par l'USB : on attend (3 s max) que l'ordinateur l'ouvre
+  while (!Serial && millis() < 3000) delay(10);
   delay(500);
+  Serial.printf("Broches : CS=%d DC=%d RES=%d SDA=%d SCL=%d\n", TFT_CS, TFT_DC, TFT_RST, TFT_MOSI, TFT_SCLK);
   testerBroches();
 }
 
