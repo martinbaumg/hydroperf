@@ -67,6 +67,25 @@ static void envoyerOk() {
   server.send(200, "application/json", "{\"ok\":true}");
 }
 
+// Valeur reçue si elle fait partie de la liste, sinon la première de la liste
+static const char* choixParmi(JsonVariantConst v, std::initializer_list<const char*> valeurs) {
+  const char* texte = v | "";
+  for (const char* c : valeurs) {
+    if (strcmp(texte, c) == 0) return c;
+  }
+  return *valeurs.begin();
+}
+
+// Texte libre limité à "max" octets, sans couper un caractère accentué en deux
+static String texteCourt(JsonVariantConst v, size_t max) {
+  String texte = v | "";
+  texte.trim();
+  if (texte.length() <= max) return texte;
+  size_t fin = max;
+  while (fin > 0 && ((uint8_t)texte[fin] & 0xC0) == 0x80) fin--;
+  return texte.substring(0, fin);
+}
+
 // Corps JSON d'une requête POST
 static bool lireCorps(JsonDocument& doc) {
   if (deserializeJson(doc, server.arg("plain"))) {
@@ -85,12 +104,12 @@ static void envoyerConfig() {
   envoyerJson(doc);
 }
 
-// Historique : le fichier contient une sortie JSON par ligne, on renvoie un tableau
-static void envoyerHistorique() {
+// Historique et retours : le fichier contient un objet JSON par ligne, on renvoie un tableau
+static void envoyerLignesJson(const char* chemin) {
   server.setContentLength(CONTENT_LENGTH_UNKNOWN);
   server.send(200, "application/json", "");
   server.sendContent("[");
-  File f = LittleFS.open(FICHIER_HISTORIQUE, "r");
+  File f = LittleFS.open(chemin, "r");
   bool premier = true;
   while (f && f.available()) {
     String ligne = f.readStringUntil('\n');
@@ -149,7 +168,39 @@ static void definirRoutes() {
     envoyerJson(doc);
   });
   server.on("/api/config", HTTP_GET, envoyerConfig);
-  server.on("/api/historique", HTTP_GET, envoyerHistorique);
+  server.on("/api/historique", HTTP_GET, []() { envoyerLignesJson(FICHIER_HISTORIQUE); });
+
+  // Retours de fin de sortie, pour l'équipe : liste complète (Réglages > Pour l'équipe HydroPerf)
+  server.on("/api/retours", HTTP_GET, []() { envoyerLignesJson(FICHIER_RETOURS); });
+  server.on("/api/retours/effacer", HTTP_POST, []() { effacerRetours(); envoyerOk(); });
+
+  // Formulaire de fin de sortie :
+  // {"a_bu":"oui|en_partie|non", "raisons":["alerte_ratee",...], "raison_autre":"...",
+  //  "dosage":"bien|trop_souvent|pas_assez|quantites", "remarques":"..."}
+  server.on("/api/retour", HTTP_POST, []() {
+    JsonDocument recu;
+    if (!lireCorps(recu)) return;
+    JsonDocument retour;
+    if (time(nullptr) > 1700000000) retour["date"] = (uint32_t)time(nullptr);
+    retour["a_bu"] = choixParmi(recu["a_bu"], {"", "oui", "en_partie", "non"});  // "" : pas répondu
+    JsonArray raisons = retour["raisons"].to<JsonArray>();
+    for (JsonVariantConst r : recu["raisons"].as<JsonArrayConst>()) {
+      const char* raison = choixParmi(r, {"", "alerte_ratee", "pas_pratique", "pas_soif", "plus_de_boisson",
+                                          "trop_d_alertes", "autre"});
+      if (*raison && raisons.size() < 6) raisons.add(raison);
+    }
+    retour["raison_autre"] = texteCourt(recu["raison_autre"], 200);
+    retour["dosage"] = choixParmi(recu["dosage"], {"", "bien", "trop_souvent", "pas_assez", "quantites"});
+    retour["remarques"] = texteCourt(recu["remarques"], 1000);
+    sortieResume(retour["sortie"].to<JsonObject>());
+    if (!ajouterRetour(retour)) {
+      server.send(507, "application/json", "{\"erreur\":\"memoire des retours pleine\"}");
+      return;
+    }
+    Serial.printf("Retour enregistré : a bu \"%s\", dosage \"%s\"\n",
+                  retour["a_bu"].as<const char*>(), retour["dosage"].as<const char*>());
+    envoyerOk();
+  });
 
   // L'ESP32 n'a pas d'horloge : le téléphone lui donne l'heure (secondes Unix)
   server.on("/api/heure", HTTP_POST, []() {

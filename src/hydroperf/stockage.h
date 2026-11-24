@@ -23,6 +23,11 @@ void ajouterHistorique(const JsonDocument& sortie);
 void effacerHistorique();
 extern const char* FICHIER_HISTORIQUE;
 
+// Retours des utilisateurs en fin de sortie (pour l'équipe) : une ligne JSON par retour dans /retours.jsonl
+bool ajouterRetour(const JsonDocument& retour);  // false si la mémoire réservée aux retours est pleine
+void effacerRetours();
+extern const char* FICHIER_RETOURS;
+
 // Sortie en cours, sauvegardée régulièrement pour survivre à une coupure
 bool lireJson(const char* chemin, JsonDocument& doc);
 bool ecrireJson(const char* chemin, const JsonDocument& doc);

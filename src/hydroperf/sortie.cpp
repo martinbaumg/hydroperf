@@ -68,6 +68,26 @@ static float facteurChaleur(float ressenti) {
   return constrain(1 + 0.03 * (ressenti - 24), 0.8f, 1.6f);
 }
 
+// ---------- Sources des données ----------
+// Le boîtier doit marcher sans montre ni météo : chaque donnée a une solution de repli.
+//   Effort : fréquence cardiaque de la montre, sinon type de séance déclaré
+//   Météo  : météo simulée (plus tard celle du téléphone), sinon aucune correction de chaleur
+
+// Réglages > Test : "simule" (montre simulée) ou "aucun" (pas de montre)
+static bool cardioDisponible() {
+  return strcmp(reglages["source_cardio"] | "simule", "aucun") != 0;
+}
+
+// Réglages > Test : un scénario de météo simulée, ou "aucune"
+static bool meteoDisponible() {
+  return strcmp(reglages["simulation_meteo"] | "auto", "aucune") != 0;
+}
+
+// Effet de la météo sur la sueur : 1 (aucun effet) quand il n'y a pas de météo
+static float facteurMeteo() {
+  return meteoDisponible() ? facteurChaleur(meteo().ressenti) : 1;
+}
+
 static float vitesseKmh(const String& sport, const String& seance) {
   float base = sport == "velo" ? 25 : sport == "trail" ? 7 : 10;
   float facteur = seance == "footing" ? 0.9 : seance == "fractionne" ? 1.1 : 1.0;
@@ -168,6 +188,8 @@ struct EtatSortie {
   int gorgeesPrevues = 0;
   std::vector<Bidon> bidons;
   float buMl = 0, perdueMl = 0, km = 0, fcSomme = 0, sodiumPerdu = 0, sodiumApporte = 0;
+  uint32_t dureeCardio = 0;   // secondes avec la montre (pour la fréquence cardiaque moyenne)
+  bool effortMesure = false;  // effort mesuré par la montre (true) ou estimé avec le type de séance
   int rappel = 0;       // secondes avant la prochaine alerte
   int nbRappels = 0;
   int planIntervalle = 0, planGorgees = 0;  // plan d'hydratation en cours
@@ -272,7 +294,7 @@ static Plan calculerPlan(float transpiLh) {
 // Transpiration attendue (L/h) pour une séance, avec la météo du moment
 static float transpirationPrevue(const char* seance) {
   float sueur = profil["sueur"] | 0.9;
-  return sueur * intensiteSeance(seance) / 0.65 * facteurChaleur(meteo().ressenti);
+  return sueur * intensiteSeance(seance) / 0.65 * facteurMeteo();
 }
 
 void prevoir(JsonVariantConst config, JsonVariant p) {
@@ -301,31 +323,53 @@ static int objectifActuel() {
   return s.dureePrevue ? max(s.objectifInitial, selonPerte) : selonPerte;
 }
 
-// ---------- Simulation de la montre ----------
+// ---------- Effort et transpiration (montre simulée ou type de séance) ----------
 
-static void simuler() {
+// Intensité prévue par le type de séance à l'instant "duree" (part de la réserve cardiaque) :
+// 10 min d'échauffement, puis pour le fractionné 3 min d'effort / 3 min de récupération
+static float intensitePrevue(uint32_t duree) {
+  float cible = intensiteSeance(s.seance);
+  if (s.seance == "fractionne" && duree > 600) cible = (duree / 180) % 2 ? 0.5 : 0.85;
+  float echauffement = min(1.0f, duree / 600.0f);
+  return 0.15 + (cible - 0.15) * echauffement;
+}
+
+// Montre simulée : le cœur rejoint progressivement l'intensité prévue, avec de petites variations.
+// Renvoie l'intensité mesurée (part de la réserve cardiaque).
+static float simulerCardio(float intensite) {
   float fcRepos = profil["fc_repos"] | 52;
   float fcMax = profil["fc_max"] | 189;
-  float sueur = profil["sueur"] | 0.9;
-
-  // Fractionné : 3 min d'effort, 3 min de récupération après 10 min d'échauffement
-  float cible = intensiteSeance(s.seance);
-  if (s.seance == "fractionne" && s.duree > 600) cible = (s.duree / 180) % 2 ? 0.5 : 0.85;
-  float echauffement = min(1.0f, s.duree / 600.0f);
-  float intensite = 0.15 + (cible - 0.15) * echauffement;
-
-  // Le cœur rejoint progressivement sa cible, avec de petites variations
   float fcCible = fcRepos + intensite * (fcMax - fcRepos);
   if (s.fcLisse == 0) s.fcLisse = fcRepos;
   s.fcLisse += (fcCible - s.fcLisse) * 0.05;
   s.fc = s.fcLisse + 3 * sin(s.duree / 240.0) + random(-20, 21) / 10.0;
+  s.fcSomme += s.fc;
+  s.dureeCardio++;
+  return (s.fc - fcRepos) / (fcMax - fcRepos);
+}
 
-  float intensiteReelle = (s.fc - fcRepos) / (fcMax - fcRepos);
-  s.transpi = constrain(sueur * intensiteReelle / 0.65 * facteurChaleur(meteo().ressenti), 0.1f, 2.5f);
+static void simuler() {
+  float sueur = profil["sueur"] | 0.9;
+  float intensite = intensitePrevue(s.duree);
+
+  // Effort : mesuré par la montre si elle est là, sinon estimé avec le type de séance
+  s.effortMesure = cardioDisponible();
+  if (s.effortMesure) {
+    intensite = simulerCardio(intensite);
+  } else {
+    s.fc = 0;
+  }
+
+  // Sueur = transpiration du profil × effort (1 pour une sortie longue) × météo
+  s.transpi = constrain(sueur * intensite / 0.65 * facteurMeteo(), 0.1f, 2.5f);
   s.perdueMl += s.transpi * 1000 / 3600;
   s.sodiumPerdu += s.transpi / 3600 * sodiumSueurMgL();
   s.km += vitesseKmh(s.sport, s.seance) / 3600;
-  s.fcSomme += s.fc;
+}
+
+// Fréquence cardiaque moyenne sur le temps passé avec la montre (0 sans montre)
+static int fcMoyenne() {
+  return s.dureeCardio ? round(s.fcSomme / s.dureeCardio) : 0;
 }
 
 // ---------- Alertes ----------
@@ -340,7 +384,7 @@ static float transpirationRecente() {
 // Eau au début ; après 45 min ou quand il fait chaud, une alerte sur deux
 // avec un bidon qui apporte des électrolytes. -1 si tous les bidons sont vides.
 static int choisirBidon() {
-  bool besoinSel = s.duree >= 45 * 60 || meteo().ressenti >= 27;
+  bool besoinSel = s.duree >= 45 * 60 || (meteoDisponible() && meteo().ressenti >= 27);
   bool tourSel = besoinSel && s.nbRappels % 2 == 1;
   int secours = -1;
   for (size_t i = 0; i < s.bidons.size(); i++) {
@@ -421,7 +465,7 @@ static void versJson(JsonDocument& d, bool complet) {
   d["perdue"] = round(s.perdueMl);
   d["sodium_perdu"] = round(s.sodiumPerdu);
   d["sodium_apporte"] = round(s.sodiumApporte);
-  d["fc_moy"] = s.duree ? round(s.fcSomme / s.duree) : 0;
+  d["fc_moy"] = fcMoyenne();
   d["rappels"] = s.nbRappels;
   JsonArray bidons = d["bidons"].to<JsonArray>();
   for (const Bidon& b : s.bidons) {
@@ -449,6 +493,7 @@ static void versJson(JsonDocument& d, bool complet) {
   d["duree_alerte"] = s.dureeAlerte;
   d["rappel"] = s.rappel;
   d["fc_somme"] = s.fcSomme;
+  d["duree_cardio"] = s.dureeCardio;
   d["perdue_exacte"] = s.perdueMl;
   d["sodium_perdu_exact"] = s.sodiumPerdu;
   d["sodium_apporte_exact"] = s.sodiumApporte;
@@ -484,6 +529,8 @@ void sortieInit() {
   s.sodiumPerdu = d["sodium_perdu_exact"] | 0.0;
   s.sodiumApporte = d["sodium_apporte_exact"] | 0.0;
   s.fcSomme = d["fc_somme"] | 0.0;
+  // Anciennes sauvegardes : la montre était toujours là
+  s.dureeCardio = d["duree_cardio"] | s.duree;
   s.nbRappels = d["rappels"] | 0;
   s.objectifInitial = d["objectif_initial"] | 0;
   s.gorgeesPrevues = d["gorgees_prevues"] | 3;
@@ -549,8 +596,21 @@ void sortiePause() {
   afficherEtat();
 }
 
+// Résumé de la dernière sortie terminée, joint au retour de l'utilisateur (voir sortieResume)
+static JsonDocument dernierResume;
+
 bool sortieTerminer() {
   if (!s.active) return false;
+  dernierResume.clear();
+  dernierResume["debut"] = s.debut;
+  dernierResume["duree"] = s.duree;
+  dernierResume["sport"] = s.sport;
+  dernierResume["seance"] = s.seance;
+  dernierResume["bu"] = round(s.buMl);
+  dernierResume["objectif"] = objectifActuel();
+  dernierResume["perdue"] = round(s.perdueMl);
+  dernierResume["rappels"] = s.nbRappels;
+  dernierResume["fc_moy"] = fcMoyenne();
   // Consentement : l'historique n'est enregistré que si l'utilisateur l'accepte
   if (reglages["consent_historique"] | true) {
     JsonDocument bilan;
@@ -595,13 +655,21 @@ void sortieTick() {
 }
 
 void sortieEtat(JsonDocument& doc) {
-  Meteo m = meteo();
   doc["active"] = s.active;
   doc["pause"] = s.pause;
-  doc["meteo"]["temp"] = round(m.temp * 10) / 10;
-  doc["meteo"]["humidite"] = round(m.humidite);
-  doc["meteo"]["ressenti"] = round(m.ressenti * 10) / 10;
-  doc["meteo"]["scenario"] = reglages["simulation_meteo"] | "auto";
+  // Sans météo, "meteo" vaut null : l'appli l'affiche et l'algorithme ne corrige pas la chaleur
+  if (meteoDisponible()) {
+    Meteo m = meteo();
+    doc["meteo"]["temp"] = round(m.temp * 10) / 10;
+    doc["meteo"]["humidite"] = round(m.humidite);
+    doc["meteo"]["ressenti"] = round(m.ressenti * 10) / 10;
+    doc["meteo"]["scenario"] = reglages["simulation_meteo"] | "auto";
+  } else {
+    doc["meteo"] = nullptr;
+  }
+  // D'où viennent les estimations : "cardio" ou "seance" pour l'effort, "simulee" ou "aucune" pour la météo
+  doc["sources"]["effort"] = cardioDisponible() ? "cardio" : "seance";
+  doc["sources"]["meteo"] = meteoDisponible() ? "simulee" : "aucune";
   // Batterie simulée : perd 1 % toutes les 6 minutes depuis l'allumage
   doc["batterie"] = max(5, 100 - (int)(millis() / 360000));
   if (!s.active) return;
@@ -615,7 +683,8 @@ void sortieEtat(JsonDocument& doc) {
   doc["perdue"] = round(s.perdueMl);
   doc["sodium_perdu"] = round(s.sodiumPerdu);
   doc["sodium_apporte"] = round(s.sodiumApporte);
-  doc["fc"] = round(s.fc);
+  if (s.effortMesure) doc["fc"] = round(s.fc);
+  else doc["fc"] = nullptr;  // pas de montre
   doc["transpi"] = round(s.transpi * 10) / 10;
   doc["km"] = round(s.km * 10) / 10;
   doc["rappel"] = s.rappel;
@@ -636,4 +705,10 @@ void sortieEtat(JsonDocument& doc) {
     o["sel"] = b.sel;
     o["bu"] = round(b.bu);
   }
+}
+
+bool sortieResume(JsonObject resume) {
+  if (dernierResume.isNull()) return false;
+  resume.set(dernierResume.as<JsonObjectConst>());
+  return true;
 }

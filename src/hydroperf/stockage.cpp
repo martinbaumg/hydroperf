@@ -23,10 +23,12 @@ static const char PROFIL_DEFAUT[] = R"({"poids":68,"taille":178,"fc_repos":52,"f
   {"volume":750,"type":"eau","sucre":false,"sel":false},
   {"volume":500,"type":"electrolyte","sucre":false,"sel":false}]})"
 
+// simulation_meteo : auto, frais, doux, chaud, canicule, ou "aucune" (pas de météo)
+// source_cardio : "simule" (montre simulée) ou "aucun" (pas de montre : effort estimé avec la séance)
 static const char REGLAGES_DEFAUT[] = R"({
   "fixation":"poignet",
   "alerte_vibreur":true,"alerte_buzzer":false,"intensite_vibreur":80,"intensite_buzzer":60,
-  "duree_ecran":10,"simulation_meteo":"auto",
+  "duree_ecran":10,"simulation_meteo":"auto","source_cardio":"simule",
   "auto":true,"intervalle":12,"gorgee":30,
   "consent_historique":true,"consent_sante":false,"consent_anonyme":false,
   "unites":"metrique","theme":"auto","notif_telephone":true,
@@ -168,4 +170,29 @@ void ajouterHistorique(const JsonDocument& sortie) {
 
 void effacerHistorique() {
   supprimerFichier(FICHIER_HISTORIQUE);
+}
+
+// ---------- Retours de fin de sortie ----------
+
+const char* FICHIER_RETOURS = "/retours.jsonl";
+// Environ 1 000 retours : au-delà, on n'en ajoute plus pour ne pas remplir la mémoire
+static const size_t TAILLE_MAX_RETOURS = 512 * 1024;
+
+bool ajouterRetour(const JsonDocument& retour) {
+  if (LittleFS.exists(FICHIER_RETOURS)) {
+    File f = LittleFS.open(FICHIER_RETOURS, "r");
+    size_t taille = f ? f.size() : 0;
+    if (f) f.close();
+    if (taille > TAILLE_MAX_RETOURS) return false;
+  }
+  File f = LittleFS.open(FICHIER_RETOURS, "a");
+  if (!f) return false;
+  serializeJson(retour, f);
+  f.print('\n');
+  f.close();
+  return true;
+}
+
+void effacerRetours() {
+  supprimerFichier(FICHIER_RETOURS);
 }

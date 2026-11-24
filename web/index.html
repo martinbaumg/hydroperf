@@ -77,6 +77,7 @@ h2{margin:6px 6px 0;font-size:17px;font-weight:900}
 .segment button{flex:1;min-height:44px;padding:0 10px;border:0;border-radius:20px;background:none;color:var(--texte2);font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:6px}
 .segment button[aria-pressed="true"]{background:var(--accent);color:#17323f;font-weight:900}
 .segment.grille{display:grid;grid-template-columns:1fr 1fr}
+.segment.grille.trois{grid-template-columns:1fr 1fr 1fr}
 #test [data-reglage] button{padding:0 4px;font-size:13px}
 .curseur{display:flex;align-items:center;gap:8px}
 .curseur input[type=range]{width:110px}
@@ -134,6 +135,11 @@ nav button[aria-current="page"]{background:var(--accent);color:#17323f;font-weig
 dialog{border:0;border-radius:26px;padding:18px;width:min(90vw,420px);background:var(--carte);color:var(--texte);display:none;flex-direction:column;gap:12px}
 dialog[open]{display:flex}
 dialog::backdrop{background:rgba(23,50,63,.45)}
+dialog{max-height:90vh;overflow:auto}
+.question{font-weight:900;font-size:15px;margin-top:4px}
+.groupe{display:flex;flex-direction:column;gap:10px}
+.groupe[hidden]{display:none}
+textarea.saisie{min-height:96px;padding:12px 16px;border-radius:20px;font-family:inherit;font-weight:600;resize:vertical}
 button:disabled{opacity:.5}
 </style>
 </head>
@@ -229,6 +235,7 @@ button:disabled{opacity:.5}
 <div class="tuile"><span class="moyen" data-v="transpi">–</span><span class="texte2">transpiration</span></div>
 <div class="tuile"><span class="moyen" data-v="km">–</span><span class="texte2">parcourus</span></div>
 </div>
+<div class="petit texte2 centre" data-v="live_sources"></div>
 <div class="carte">
 <div class="titre-carte">Tes bidons</div>
 <div data-live-bidons class="bidons"></div>
@@ -264,9 +271,14 @@ button:disabled{opacity:.5}
 <button class="bouton bleu" data-action="tester_alerte">Tester l'alerte</button>
 </div>
 <div class="carte">
+<div class="titre-carte">Montre cardio</div>
+<div class="texte2">Sans montre, HydroPerf estime ton effort avec ton type de séance</div>
+<div class="segment" role="group" aria-label="Montre cardio" data-reglage="source_cardio"><button data-valeur="simule" aria-pressed="false">Simulée</button><button data-valeur="aucun" aria-pressed="false">Pas de montre</button></div>
+</div>
+<div class="carte">
 <div class="titre-carte">Simulation de la météo</div>
 <div class="texte2" data-v="simulation_detail">Change la météo simulée pour voir l'algorithme s'adapter</div>
-<div class="segment" role="group" aria-label="Météo simulée" data-reglage="simulation_meteo"><button data-valeur="auto" aria-pressed="false">Auto</button><button data-valeur="frais" aria-pressed="false">Frais</button><button data-valeur="doux" aria-pressed="false">Doux</button><button data-valeur="chaud" aria-pressed="false">Chaud</button><button data-valeur="canicule" aria-pressed="false">Canicule</button></div>
+<div class="segment grille trois" role="group" aria-label="Météo simulée" data-reglage="simulation_meteo"><button data-valeur="auto" aria-pressed="false">Auto</button><button data-valeur="frais" aria-pressed="false">Frais</button><button data-valeur="doux" aria-pressed="false">Doux</button><button data-valeur="chaud" aria-pressed="false">Chaud</button><button data-valeur="canicule" aria-pressed="false">Canicule</button><button data-valeur="aucune" aria-pressed="false">Aucune</button></div>
 </div>
 <div class="carte">
 <div class="titre-carte">Écran</div>
@@ -347,6 +359,11 @@ button:disabled{opacity:.5}
 <div class="ligne" data-action="politique"><span>Politique de confidentialité</span><span class="valeur">›</span></div>
 <div class="ligne" data-action="avertissement"><span>Avertissement médical</span><span class="valeur">›</span></div>
 </div>
+<h2>Pour l'équipe HydroPerf</h2>
+<div class="carte liste-lignes">
+<div class="ligne" data-action="exporter_retours"><span>Retours de fin de sortie</span><span class="valeur bleu-texte" data-v="nb_retours">CSV</span></div>
+<div class="ligne" data-action="effacer_retours"><span>Effacer les retours</span><span class="valeur rouge-texte">Effacer</span></div>
+</div>
 <h2>Préférences</h2>
 <div class="carte liste-lignes">
 <div class="ligne" ><span>Unités</span><div class="segment" role="group" aria-label="Unités" data-reglage="unites"><button data-valeur="metrique" aria-pressed="false">Métrique</button><button data-valeur="imperial" aria-pressed="false">Impérial</button></div></div>
@@ -361,6 +378,22 @@ button:disabled{opacity:.5}
 <div class="titre-carte" data-v="legal_titre"></div>
 <div class="legal" data-v="legal_texte"></div>
 <button class="bouton bleu" data-action="fermer_legal">J'ai compris</button>
+</dialog>
+<dialog id="retour" aria-labelledby="retour-titre">
+<div class="titre-carte" id="retour-titre">Comment s'est passée ta sortie ?</div>
+<div class="texte2">Tes réponses aident l'équipe à améliorer HydroPerf.</div>
+<div class="question">As-tu bu comme HydroPerf te l'a demandé ?</div>
+<div class="segment" role="group" aria-label="As-tu bu comme demandé ?" data-retour="a_bu"><button data-valeur="oui" aria-pressed="false">Oui</button><button data-valeur="en_partie" aria-pressed="false">En partie</button><button data-valeur="non" aria-pressed="false">Non</button></div>
+<div class="groupe" data-retour-pourquoi hidden>
+<div class="question">Pourquoi ? <span class="texte2 petit">(plusieurs réponses possibles)</span></div>
+<div class="segment grille" role="group" aria-label="Pourquoi" data-retour-multi="raisons"><button data-valeur="alerte_ratee" aria-pressed="false">Alerte pas remarquée</button><button data-valeur="pas_pratique" aria-pressed="false">Pas pratique</button><button data-valeur="pas_soif" aria-pressed="false">Pas soif</button><button data-valeur="plus_de_boisson" aria-pressed="false">Plus de boisson</button><button data-valeur="trop_d_alertes" aria-pressed="false">Trop d'alertes</button><button data-valeur="autre" aria-pressed="false">Autre</button></div>
+<input class="saisie" data-retour-texte="raison_autre" type="text" maxlength="200" placeholder="Précise si tu veux" aria-label="Précise la raison">
+</div>
+<div class="question">Les rappels pour boire étaient-ils bien dosés ?</div>
+<div class="segment grille" role="group" aria-label="Les rappels étaient-ils bien dosés ?" data-retour="dosage"><button data-valeur="bien" aria-pressed="false">Oui, c'était bien</button><button data-valeur="trop_souvent" aria-pressed="false">Trop souvent</button><button data-valeur="pas_assez" aria-pressed="false">Pas assez souvent</button><button data-valeur="quantites" aria-pressed="false">Mauvaises quantités</button></div>
+<div class="question">D'autres remarques ?</div>
+<textarea class="saisie" data-retour-texte="remarques" maxlength="1000" rows="3" placeholder="Ce qui t'a plu, ce qui t'a gêné, ce qu'il faudrait changer…" aria-label="Autres remarques"></textarea>
+<div class="rangee"><button class="bouton secondaire" data-action="passer_retour">Passer</button><button class="bouton bleu" data-action="envoyer_retour">Envoyer</button></div>
 </dialog>
 <script>
 // ================= Thème (appliqué tout de suite pour éviter un flash) =================
@@ -480,7 +513,22 @@ function afficherAccueil() {
     const scenario = SCENARIOS[e.meteo.scenario];
     texte("meteo_source", `Météo simulée par le boîtier${scenario ? ` (scénario ${scenario})` : ""} : son Wi-Fi n'a pas accès à Internet.`);
     texte("simulation_detail", `Météo actuelle : ${temperature(e.meteo.temp)}, ressenti ${temperature(e.meteo.ressenti)}. Change-la pour voir l'algorithme s'adapter.`);
+  } else if (e.sources) {
+    texte("meteo_temp", "–");
+    texte("meteo_detail", "Pas de météo");
+    texte("meteo_source", "Sans météo, HydroPerf calcule tes gorgées sans tenir compte de la chaleur.");
+    texte("simulation_detail", "Aucune météo : l'algorithme ne tient pas compte de la chaleur.");
   }
+}
+
+// Phrase qui dit d'où viennent l'effort et la météo utilisés pour les calculs
+function sourcesEstimation(e) {
+  if (!e.sources) return "";
+  const effort = e.sources.effort === "cardio"
+    ? "Effort mesuré par ta montre (simulée)"
+    : `Effort estimé avec ta séance (${(SEANCES[e.seance] || "").toLowerCase()})`;
+  const meteo = e.sources.meteo === "aucune" ? "sans météo" : "météo simulée";
+  return `${effort} · ${meteo}`;
 }
 
 // Part de l'eau à compenser (80 % de l'eau perdue) réellement bue pendant la sortie
@@ -653,10 +701,11 @@ function afficherLive() {
     : "");
   texte("live_objectif", e.duree_prevue ? `sur ${volume(e.objectif)}` : `objectif du moment : ${volume(e.objectif)}`);
   $("[data-barre]").style.width = `${Math.min(100, ratio * 100)}%`;
-  texte("fc", e.fc);
+  texte("fc", e.fc ?? "–");
   texte("perdue", volume(e.perdue));
   texte("sodium", `${e.sodium_perdu} mg`);
-  texte("temp", temperature(e.meteo.ressenti));
+  texte("temp", e.meteo ? temperature(e.meteo.ressenti) : "–");
+  texte("live_sources", sourcesEstimation(e));
   texte("transpi", `${nombre(e.transpi)} L/h`);
   texte("km", distance(e.km));
   $('[data-action="pause"]').textContent = e.pause ? "Reprendre" : "Pause";
@@ -767,6 +816,12 @@ async function chargerConfig() {
   afficherConfig();
 }
 
+let retours = [];  // réponses au questionnaire de fin de sortie
+async function chargerRetours() {
+  retours = await api("/api/retours");
+  texte("nb_retours", `${pluriel(retours.length, "retour")} · CSV`);
+}
+
 async function chargerHistorique() {
   historique = await api("/api/historique");
   afficherTableauDeBord();
@@ -820,7 +875,7 @@ function demanderNombre(question, actuel, min, max) {
 
 const POLITIQUE = `HydroPerf respecte ta vie privée.
 
-Données enregistrées : ton profil (poids, taille, fréquence cardiaque, sexe si tu le donnes, transpiration), tes réglages et l'historique de tes sorties.
+Données enregistrées : ton profil (poids, taille, fréquence cardiaque, sexe si tu le donnes, transpiration), tes réglages, l'historique de tes sorties et tes réponses au questionnaire de fin de sortie (avec un résumé de la sortie).
 
 Où elles sont stockées : uniquement dans la mémoire du boîtier HydroPerf. Rien n'est envoyé sur Internet.
 
@@ -842,6 +897,36 @@ function ouvrirLegal(titre, contenu) {
   $("#texte-legal").showModal();
 }
 
+// ================= Questionnaire de fin de sortie =================
+
+const A_BU = {oui: "Oui", en_partie: "En partie", non: "Non"};
+const RAISONS = {alerte_ratee: "Alerte pas remarquée", pas_pratique: "Pas pratique", pas_soif: "Pas soif",
+  plus_de_boisson: "Plus de boisson", trop_d_alertes: "Trop d'alertes", autre: "Autre"};
+const DOSAGES = {bien: "Oui, c'était bien", trop_souvent: "Trop souvent", pas_assez: "Pas assez souvent",
+  quantites: "Mauvaises quantités"};
+
+function ouvrirRetour() {
+  const d = $("#retour");
+  $$("button[data-valeur]", d).forEach(b => b.setAttribute("aria-pressed", "false"));
+  $$("[data-retour-texte]", d).forEach(c => c.value = "");
+  $("[data-retour-pourquoi]", d).hidden = true;
+  d.showModal();
+}
+
+function lireRetour() {
+  const d = $("#retour");
+  const choisi = cle => $(`[data-retour="${cle}"] [aria-pressed="true"]`, d)?.dataset.valeur || "";
+  const aBu = choisi("a_bu");
+  return {
+    a_bu: aBu,
+    // Les raisons ne comptent que si l'utilisateur n'a pas tout bu
+    raisons: aBu === "oui" ? [] : $$('[data-retour-multi="raisons"] [aria-pressed="true"]', d).map(b => b.dataset.valeur),
+    raison_autre: aBu === "oui" ? "" : $('[data-retour-texte="raison_autre"]', d).value.trim(),
+    dosage: choisi("dosage"),
+    remarques: $('[data-retour-texte="remarques"]', d).value.trim(),
+  };
+}
+
 // ================= Boutons =================
 
 const ACTIONS = {
@@ -860,6 +945,54 @@ const ACTIONS = {
     await action("/api/sortie/terminer");
     await chargerHistorique().catch(() => {});
     aller("accueil");
+    if (!etat.active && !etat.horsLigne) ouvrirRetour();
+  },
+  passer_retour() {
+    $("#retour").close();
+  },
+  async envoyer_retour() {
+    const r = lireRetour();
+    if (!r.a_bu && !r.dosage && !r.remarques) {
+      return alert("Réponds à au moins une question, ou appuie sur Passer.");
+    }
+    try {
+      await api("/api/retour", r);
+    } catch (e) {
+      return alert("Impossible d'envoyer ton retour, le boîtier ne répond pas.");
+    }
+    $("#retour").close();
+    chargerRetours().catch(() => {});
+  },
+  async exporter_retours() {
+    try {
+      await chargerRetours();
+    } catch (e) {
+      return horsLigne();
+    }
+    if (!retours.length) return alert("Aucun retour pour l'instant.");
+    const colonnes = ["date", "sport", "seance", "duree_min", "bu_ml", "objectif_ml", "alertes",
+      "a_bu_comme_demande", "raisons", "precision", "rappels_bien_doses", "remarques"];
+    const lignes = retours.map(r => {
+      const sortie = r.sortie || {};
+      const date = r.date || sortie.debut;
+      return [
+        date ? new Date(date * 1000).toLocaleString("fr-FR") : "",
+        SPORTS[sortie.sport] || sortie.sport, SEANCES[sortie.seance] || sortie.seance,
+        sortie.duree !== undefined ? Math.round(sortie.duree / 60) : "", sortie.bu, sortie.objectif, sortie.rappels,
+        A_BU[r.a_bu] || r.a_bu, (r.raisons || []).map(x => RAISONS[x] || x).join(", "), r.raison_autre,
+        DOSAGES[r.dosage] || r.dosage, r.remarques,
+      ].map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(";");
+    });
+    const csv = "\ufeff" + [colonnes.join(";"), ...lignes].join("\n");
+    const lien = document.createElement("a");
+    lien.href = URL.createObjectURL(new Blob([csv], {type: "text/csv"}));
+    lien.download = "hydroperf-retours.csv";
+    lien.click();
+  },
+  async effacer_retours() {
+    if (!confirm("Effacer tous les retours de fin de sortie ? C'est définitif.")) return;
+    await action("/api/retours/effacer");
+    await chargerRetours().catch(() => {});
   },
   async enregistrer_seance() {
     const nom = prompt("Nom de la séance", `${SEANCES[prep.seance]} ${SPORTS[prep.sport].toLowerCase()}`);
@@ -902,7 +1035,7 @@ const ACTIONS = {
     const lignes = historique.map(h => [
       h.debut ? new Date(h.debut * 1000).toLocaleString("fr-FR") : "",
       SPORTS[h.sport] || h.sport, SEANCES[h.seance] || h.seance, Math.round(h.duree / 60), h.km, h.bu, h.objectif,
-      h.perdue, h.sodium_perdu, h.sodium_apporte, h.fc_moy, h.rappels,
+      h.perdue, h.sodium_perdu, h.sodium_apporte, h.fc_moy || "", h.rappels,  // fc_moy = 0 : pas de montre
     ].map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(";"));
     const csv = "﻿" + [colonnes.join(";"), ...lignes].join("\n");
     const lien = document.createElement("a");
@@ -972,6 +1105,17 @@ document.addEventListener("click", ev => {
   if ((el = t.closest("[data-seance]"))) {
     const c = config.courses.find(x => x.id === Number(el.dataset.seance));
     if (c) chargerPreparation(c);
+    return;
+  }
+  // Questionnaire de fin de sortie : un seul choix par question, plusieurs pour "Pourquoi ?"
+  if ((el = t.closest("#retour [data-retour] button[data-valeur]"))) {
+    const groupe = el.closest("[data-retour]");
+    selectionner(groupe, el.dataset.valeur);
+    if (groupe.dataset.retour === "a_bu") $("#retour [data-retour-pourquoi]").hidden = el.dataset.valeur === "oui";
+    return;
+  }
+  if ((el = t.closest("#retour [data-retour-multi] button[data-valeur]"))) {
+    el.setAttribute("aria-pressed", String(el.getAttribute("aria-pressed") !== "true"));
     return;
   }
   if ((el = t.closest("[data-action]"))) return ACTIONS[el.dataset.action]?.();
@@ -1056,6 +1200,7 @@ selectionner($('[data-test="boisson"]'), "0");
 fetch(`/api/heure?t=${Math.floor(Date.now() / 1000)}`, {method: "POST"}).catch(() => {});
 chargerConfig().catch(() => chargerPreparation(null));
 chargerHistorique().catch(() => {});
+chargerRetours().catch(() => {});
 rafraichir();
 setInterval(rafraichir, 1000);
 </script>

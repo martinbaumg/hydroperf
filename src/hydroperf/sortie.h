@@ -15,6 +15,8 @@ void normaliserConfig(JsonVariantConst recu, JsonObject config);
 bool sortieDemarrer(JsonVariantConst config);  // false si une sortie est déjà en cours
 void sortiePause();     // pause / reprise
 bool sortieTerminer();  // enregistre le bilan dans l'historique (si l'utilisateur l'accepte)
+// Résumé de la dernière sortie terminée (durée, sport, bu, objectif...) ; false s'il n'y en a pas
+bool sortieResume(JsonObject resume);
 void testerAlerte();    // joue l'alerte avec les réglages actuels
 
 // État en direct envoyé à la page toutes les secondes
