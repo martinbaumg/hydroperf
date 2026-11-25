@@ -335,6 +335,7 @@ button:disabled{opacity:.5}
 <div class="graphique" data-graphique="sueur"></div>
 <div class="petit texte2">Elle suit l'effort et la chaleur ressentie.</div>
 </div>
+<button class="bouton principal" data-action="questionnaire_resume" data-v="res_bouton_questionnaire">Questionnaire de fin de sortie</button>
 <button class="bouton bleu" data-action="fermer_resume">Préparer une nouvelle sortie</button>
 </div>
 </div>
@@ -1155,6 +1156,7 @@ function afficherResume() {
   texte("res_bu", `${volume(tot.bu)} bus`);
   texte("res_bu_detail", `sur ${volume(tot.a_boire)} conseillés et ${volume(tot.perdue)} perdus en transpirant`);
   texte("res_poids", `À l'arrivée, tu as perdu environ ${nombre(tot.perte_poids)} % de ton poids en eau (à ne pas dépasser : 2 %).`);
+  texte("res_bouton_questionnaire", r.pesee ? "Questionnaire de fin et pesée" : "Questionnaire de fin de sortie");
 
   const allure = v => v > 2 ? 3600 / v : null;
   const chiffres = [
@@ -1445,15 +1447,24 @@ const ACTIONS = {
   },
   async simuler_tout() {
     if (!confirm("Simuler la fin de la sortie d'un coup ? Elle sera terminée et tu verras son résumé.")) return;
+    const pesee = peseeEnCours;
     try {
       resume = await api("/api/sortie/simuler", {});
     } catch (e) {
       return horsLigne();
     }
+    resume.pesee = pesee;  // le questionnaire du résumé demandera alors le poids après
+    resume.questionnaire = false;
     await rafraichir();
-    chargerHistorique().catch(() => {});
+    await chargerHistorique().catch(() => {});
     window.scrollTo(0, 0);
     afficherResume();
+  },
+  // Questionnaire de fin (et pesée) depuis le résumé d'une sortie simulée
+  questionnaire_resume() {
+    if (!resume) return;
+    const h = historique[historique.length - 1];
+    ouvrirRetour(resume.pesee, h && Math.abs(h.duree - resume.duree) <= 5 ? h : null);
   },
   fermer_resume() {
     resume = null;
