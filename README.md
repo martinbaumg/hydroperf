@@ -67,8 +67,8 @@ hydroperf/
 ├── src/                    Code qui tourne sur la carte
 │   ├── hydroperf/          ★ L'application HydroPerf
 │   │   ├── hydroperf.cpp     Démarrage, Wi-Fi, adresse hydroperf.local, serveur web et API
-│   │   ├── sortie.h / .cpp   Algorithme d'hydratation : sortie en cours, alertes, choix du bidon,
-│   │   │                     données simulées (cœur, météo, distance)
+│   │   ├── sortie.h / .cpp   Algorithme d'hydratation v2 : sueur, quantité à boire, alertes,
+│   │   │                     choix du bidon, pesées, capteurs simulés (cardio, puissance, vitesse)
 │   │   ├── stockage.h / .cpp Profil, réglages, séances et historique enregistrés dans la carte
 │   │   ├── commandes.h / .cpp Pilotage de la LED, du vibreur et du buzzer
 │   │   └── brochage.h        Broches utilisées
@@ -86,7 +86,8 @@ hydroperf/
 ├── docs/                   Documents
 │   └── sprint1_schema_electrique.pdf       Schéma électrique du sprint 1
 ├── outils/
-│   └── faux_boitier.py     Imite la carte sur l'ordinateur pour tester l'interface
+│   ├── faux_boitier.py     Imite la carte sur l'ordinateur pour tester l'interface (même algorithme)
+│   └── test_algo.py        Tests de l'algorithme (exemples des documents, sorties types)
 └── archives/               Anciennes versions, gardées pour mémoire (non compilées)
     ├── hydroperf_v1.html, hydroperf_avec_bilan.html   Anciennes versions de l'application
     ├── sprint1_controle_web.cpp                       Page du sprint 1 qui pilotait aussi l'écran
@@ -127,19 +128,19 @@ La page web et les icônes sont **intégrées au programme** : après une modifi
 3. *(Facultatif)* Dans Safari sur iPhone : Partager → **Sur l'écran d'accueil**, pour avoir HydroPerf comme une application.
 4. **Onglet Sortie :** choisir le sport, le type de séance, la durée et la distance (ou « On verra comment je me sens ») et les bidons (1 à 3, taille et contenu), puis **Démarrer**.
 
-Pendant la sortie, le boîtier envoie une alerte à intervalle régulier : le vibreur et/ou le buzzer font 3 × 0,5 s, la LED s'allume, et l'écran affiche une barre par gorgée à boire (3 au maximum) avec la goutte et le type de boisson. Le programme considère que l'athlète boit à chaque alerte.
+Pendant la sortie, le boîtier calcule chaque seconde la sueur (`S_base × effort × météo`) et la quantité à boire (une part de la sueur, qui dépend de la durée prévue, plafonnée à 0,8 L/h). Il prévient dès que 2 gorgées sont « en retard », au moins 5 min après l'alerte précédente et au plus tard au bout de 20 min. Pendant un fractionné, il garde la gorgée pour la récupération si elle arrive dans les 15 min. Le vibreur et/ou le buzzer font 3 × 0,5 s, la LED s'allume, et l'écran affiche une barre par gorgée à boire (3 au maximum) avec la goutte et le type de boisson. Le programme considère que l'athlète boit à chaque alerte.
 
 Les onglets de l'application :
 
 | Onglet | Contenu |
 |---|---|
-| **Accueil** | Météo du jour, tableau de bord et séances enregistrées |
-| **Sortie** | Préparer la sortie (sport, séance, durée, bidons), puis la suivre en direct |
-| **Profil** | Sexe, transpiration (avec un test), sueur plus ou moins salée, sports pratiqués |
+| **Accueil** | Météo de la sortie, tableau de bord et séances enregistrées |
+| **Sortie** | Préparer la sortie (sport, séance, fractionné détaillé, durée, allure, météo ressentie, pesée, bidons), puis la suivre en direct avec « Pourquoi cette consigne ? » |
+| **Profil** | Sexe, équipement (montre, puissance et FTP, GPS, allure), traces de sel, transpiration de référence et pesées |
 | **Réglages** | Boîtier, alertes (vibreur, buzzer), rappels, connectivité, confidentialité et RGPD, préférences |
-| **Test** | Essayer le vibreur, le buzzer et une alerte complète, afficher sur l'écran, choisir la météo simulée |
+| **Test** | Essayer le vibreur, le buzzer et une alerte complète, afficher sur l'écran |
 
-**Ce qui est simulé :** la fréquence cardiaque, la météo et la distance. Le Wi-Fi du boîtier n'a pas accès à Internet et il n'y a pas encore de vraie montre.
+**Ce qui est simulé :** les capteurs que l'utilisateur déclare dans son profil (cardio, puissance, vitesse GPS) et la distance. L'utilisateur indique lui-même la température ressentie : le Wi-Fi du boîtier n'a pas accès à Internet.
 
 **Ce qui est enregistré dans la carte :** le profil, les réglages, les séances et l'historique des sorties. Ils restent après un redémarrage. Une sortie en cours est sauvegardée chaque minute et reprend, en pause, après une coupure. L'historique se télécharge en CSV depuis Réglages, et son enregistrement peut être désactivé (Réglages > Confidentialité).
 
@@ -158,6 +159,8 @@ python3 outils/faux_boitier.py web/index.html 8765
 ```
 
 Puis ouvrir http://localhost:8765. Pour faire avancer la sortie en cours de 10 minutes : `POST /test/avancer?s=600`.
+
+Le faux boîtier contient le même algorithme que `src/hydroperf/sortie.cpp` : une modification de l'algorithme doit être faite des deux côtés, puis vérifiée avec `python3 outils/test_algo.py`.
 
 ## Sprint 1
 

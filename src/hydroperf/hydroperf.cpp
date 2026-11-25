@@ -101,6 +101,7 @@ static void envoyerConfig() {
   doc["profil"] = profil;
   doc["reglages"] = reglages;
   doc["courses"] = courses;
+  calibrationEtat(doc["calibration"].to<JsonObject>());
   envoyerJson(doc);
 }
 
@@ -176,7 +177,8 @@ static void definirRoutes() {
 
   // Formulaire de fin de sortie :
   // {"a_bu":"oui|en_partie|non", "raisons":["alerte_ratee",...], "raison_autre":"...",
-  //  "dosage":"bien|trop_souvent|pas_assez|quantites", "remarques":"..."}
+  //  "dosage":"bien|trop_souvent|pas_assez|quantites", "remarques":"...",
+  //  "pesee":{"poids_apres":69.2, "reste":"vides|quart|moitie|pleins", "hors":false}}  (si la case était cochée)
   server.on("/api/retour", HTTP_POST, []() {
     JsonDocument recu;
     if (!lireCorps(recu)) return;
@@ -193,14 +195,23 @@ static void definirRoutes() {
     retour["dosage"] = choixParmi(recu["dosage"], {"", "bien", "trop_souvent", "pas_assez", "quantites"});
     retour["remarques"] = texteCourt(recu["remarques"], 1000);
     sortieResume(retour["sortie"].to<JsonObject>());
+    if (recu["pesee"].is<JsonObjectConst>()) {
+      JsonDocument pesee;
+      if (sortiePesee(recu["pesee"], pesee.to<JsonObject>())) retour["pesee"] = pesee;
+    }
     if (!ajouterRetour(retour)) {
       server.send(507, "application/json", "{\"erreur\":\"memoire des retours pleine\"}");
       return;
     }
     Serial.printf("Retour enregistré : a bu \"%s\", dosage \"%s\"\n",
                   retour["a_bu"].as<const char*>(), retour["dosage"].as<const char*>());
-    envoyerOk();
+    JsonDocument rep;
+    rep["ok"] = true;
+    if (!retour["pesee"].isNull()) rep["pesee"] = retour["pesee"];
+    envoyerJson(rep);
   });
+
+  server.on("/api/pesees/effacer", HTTP_POST, []() { effacerPesees(); envoyerConfig(); });
 
   // L'ESP32 n'a pas d'horloge : le téléphone lui donne l'heure (secondes Unix)
   server.on("/api/heure", HTTP_POST, []() {
@@ -227,7 +238,9 @@ static void definirRoutes() {
   });
 
   // Configuration de la séance : {"sport":"velo","seance":"longue","duree":120,"distance":50}
-  server.on("/api/seance", HTTP_POST, []() { enregistrerConfig({"sport", "seance", "duree", "distance"}); });
+  server.on("/api/seance", HTTP_POST, []() {
+    enregistrerConfig({"sport", "seance", "duree", "distance", "ressenti", "allure", "detail"});
+  });
   // Configuration des bidons : {"bidons":[{"volume":750,"type":"eau","sucre":false,"sel":false}, ...]}
   server.on("/api/bidons", HTTP_POST, []() { enregistrerConfig({"bidons"}); });
 

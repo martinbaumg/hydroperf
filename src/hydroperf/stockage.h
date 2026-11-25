@@ -3,7 +3,7 @@
 
 // Données enregistrées dans la flash (LittleFS) : elles restent après un redémarrage
 // et ne sont pas effacées quand on renvoie le programme.
-extern JsonDocument profil;    // poids, taille, fc_repos, fc_max, sueur (L/h)
+extern JsonDocument profil;    // poids, taille, cœur, équipement, traces de sel, pesées
 extern JsonDocument reglages;  // alertes, rappels, consentements, préférences, dernière configuration
 extern JsonDocument courses;   // séances enregistrées : [{id, nom, sport, seance, duree, distance, bidons}]
 
@@ -12,6 +12,8 @@ void stockageInit();
 // Recopie dans profil / reglages les clés connues présentes dans "recu", puis enregistre
 void modifierProfil(JsonVariantConst recu);
 void modifierReglages(JsonVariantConst recu);
+void enregistrerProfil();  // après une modification faite par le boîtier (pesée, puissance apprise)
+void effacerPesees();
 
 // Séances enregistrées ("config" déjà vérifiée par normaliserConfig, voir sortie.h)
 int ajouterCourse(const char* nom, JsonVariantConst config);

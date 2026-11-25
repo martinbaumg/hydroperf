@@ -78,6 +78,9 @@ h2{margin:6px 6px 0;font-size:17px;font-weight:900}
 .segment button[aria-pressed="true"]{background:var(--accent);color:#17323f;font-weight:900}
 .segment.grille{display:grid;grid-template-columns:1fr 1fr}
 .segment.grille.trois{grid-template-columns:1fr 1fr 1fr}
+.segment.grille.quatre{grid-template-columns:repeat(4,1fr)}
+details.pourquoi summary{cursor:pointer;font-weight:800;color:var(--primaire);font-size:14px;min-height:32px}
+details.pourquoi div{margin-top:6px}
 #test [data-reglage] button{padding:0 4px;font-size:13px}
 .curseur{display:flex;align-items:center;gap:8px}
 .curseur input[type=range]{width:110px}
@@ -155,8 +158,8 @@ button:disabled{opacity:.5}
 </div>
 <div class="carte">
 <div class="meteo"><svg width="54" height="54" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="5" fill="#ffd45c"></circle><g stroke="#ffb020" stroke-width="2" stroke-linecap="round"><path d="M12 2 V4 M12 20 V22 M2 12 H4 M20 12 H22 M4.9 4.9 L6.3 6.3 M17.7 17.7 L19.1 19.1 M4.9 19.1 L6.3 17.7 M17.7 6.3 L19.1 4.9"></path></g></svg>
-<div><div class="titre-carte">Météo du jour</div><div class="grand" data-v="meteo_temp">–</div><div class="texte2" data-v="meteo_detail"></div></div></div>
-<div class="petit texte2" data-v="meteo_source">Météo simulée par le boîtier : son Wi-Fi n'a pas accès à Internet.</div>
+<div><div class="titre-carte">Météo de ta sortie</div><div class="grand" data-v="meteo_temp">–</div><div class="texte2" data-v="meteo_detail"></div></div></div>
+<div class="petit texte2" data-v="meteo_source">Indique la température ressentie en préparant ta sortie.</div>
 </div>
 <div class="carte">
 <div class="titre-carte">Ton tableau de bord</div>
@@ -190,6 +193,15 @@ button:disabled{opacity:.5}
 <div class="titre-carte">Type de séance</div>
 <div class="segment" role="group" aria-label="Type de séance" data-choix="seance"><button data-valeur="footing" aria-pressed="false">Footing</button><button data-valeur="longue" aria-pressed="false">Sortie longue</button><button data-valeur="fractionne" aria-pressed="false">Fractionné</button></div>
 </div>
+<div class="carte" data-si-fractionne hidden>
+<div class="ligne" ><span>Détailler mon fractionné<br><span class="petit texte2">pour placer tes gorgées pendant les récupérations</span></span><button class="interrupteur" role="switch" aria-checked="false" aria-label="Détailler mon fractionné" data-switch="detail"><span></span></button></div>
+<div class="groupe" data-si-detail hidden>
+<div class="puces" data-modeles></div>
+<div class="champs"><label class="champ">Échauffement<span><input type="number" inputmode="numeric" min="0" max="90" data-detail="echauffement_min"> min</span></label><label class="champ">Répétitions<span><input type="number" inputmode="numeric" min="1" max="50" data-detail="repetitions"></span></label></div>
+<div class="champs"><label class="champ">Effort<span><input type="number" inputmode="numeric" min="1" data-detail="effort"><select data-detail="effort_unite" aria-label="Unité de l'effort"><option value="m">m</option><option value="s">s</option><option value="min">min</option></select></span></label><label class="champ">Récupération<span><input type="number" inputmode="numeric" min="0" max="1800" data-detail="recup_s"> s</span></label></div>
+<div class="champs"><label class="champ" data-si-allure-effort>Allure de l'effort<span><input type="text" inputmode="decimal" placeholder="4:00" data-detail="allure_effort"> /km</span></label><label class="champ">Retour au calme<span><input type="number" inputmode="numeric" min="0" max="90" data-detail="retour_calme_min"> min</span></label></div>
+</div>
+</div>
 <div class="carte">
 <div class="titre-carte">Durée et distance</div>
 <div class="ligne" data-ligne-libre><span>On verra comment je me sens</span><button class="interrupteur" role="switch" aria-checked="false" aria-label="On verra comment je me sens" data-switch="libre"><span></span></button></div>
@@ -197,6 +209,18 @@ button:disabled{opacity:.5}
 <label class="champ">Durée<span><input type="number" inputmode="numeric" min="5" max="1440" step="5" data-champ="duree"> min</span></label>
 <label class="champ">Distance<span><input type="number" inputmode="decimal" min="0" max="500" step="0.5" data-champ="distance"> <span data-unite="distance">km</span></span></label>
 </div>
+<div class="gras" data-v="duree_detail" data-si-duree-detail hidden></div>
+<label class="champ" data-si-allure>Allure prévue (facultatif)<span><input type="text" inputmode="decimal" placeholder="5:30" data-champ="allure"> /km</span></label>
+</div>
+<div class="carte">
+<div class="titre-carte">Météo de ta sortie</div>
+<div class="texte2">La température ressentie annoncée par ton appli météo</div>
+<div class="segment grille quatre" role="group" aria-label="Température ressentie" data-choix="ressenti"><button data-valeur="nsp" aria-pressed="false">Je ne sais pas</button><button data-valeur="10" aria-pressed="false">10 °C</button><button data-valeur="15" aria-pressed="false">15 °C</button><button data-valeur="20" aria-pressed="false">20 °C</button><button data-valeur="25" aria-pressed="false">25 °C</button><button data-valeur="30" aria-pressed="false">30 °C</button><button data-valeur="35" aria-pressed="false">35 °C</button></div>
+</div>
+<div class="carte" data-si-pesees hidden>
+<div class="cases"><label><input type="checkbox" data-champ="pesee"> Je me pèse aujourd'hui</label></div>
+<label class="champ" data-si-pesee hidden>Poids avant la sortie<span><input type="number" inputmode="decimal" min="30" max="200" step="0.1" data-champ="poids_avant"> kg</span></label>
+<div class="petit texte2" data-si-pesee hidden>Pèse-toi juste avant de partir et juste en rentrant, sans tes affaires mouillées. Je te demanderai ton poids à la fin.</div>
 </div>
 <div class="carte">
 <div class="titre-carte">Tes bidons</div>
@@ -209,7 +233,9 @@ button:disabled{opacity:.5}
 <div class="tres-grand" data-v="prev_objectif">–</div>
 <div class="gras" data-v="prev_rythme"></div>
 <div class="clair" data-v="prev_detail"></div>
+<div class="clair petit" data-v="prev_calcul"></div>
 <div class="avertissement" data-v="prev_alerte" hidden></div>
+<div class="clair petit">Pars bien hydraté : bois un peu dans les heures qui précèdent ta sortie.</div>
 </div>
 <button class="bouton principal" data-action="demarrer">Démarrer</button>
 </div>
@@ -224,6 +250,7 @@ button:disabled{opacity:.5}
 <div class="espace"><span><b data-v="live_bu">0 mL</b> bus</span><span class="texte2" data-v="live_objectif"></span></div>
 <div class="barre-fond"><div class="barre" data-barre></div></div>
 <div class="petit texte2" data-v="live_plan"></div>
+<details class="pourquoi"><summary>Pourquoi cette consigne ?</summary><div class="petit texte2" data-v="pourquoi"></div></details>
 </div>
 <div class="tuiles">
 <div class="tuile"><span class="moyen" data-v="fc">–</span><span class="texte2">battements/min</span></div>
@@ -271,16 +298,6 @@ button:disabled{opacity:.5}
 <button class="bouton bleu" data-action="tester_alerte">Tester l'alerte</button>
 </div>
 <div class="carte">
-<div class="titre-carte">Montre cardio</div>
-<div class="texte2">Sans montre, HydroPerf estime ton effort avec ton type de séance</div>
-<div class="segment" role="group" aria-label="Montre cardio" data-reglage="source_cardio"><button data-valeur="simule" aria-pressed="false">Simulée</button><button data-valeur="aucun" aria-pressed="false">Pas de montre</button></div>
-</div>
-<div class="carte">
-<div class="titre-carte">Simulation de la météo</div>
-<div class="texte2" data-v="simulation_detail">Change la météo simulée pour voir l'algorithme s'adapter</div>
-<div class="segment grille trois" role="group" aria-label="Météo simulée" data-reglage="simulation_meteo"><button data-valeur="auto" aria-pressed="false">Auto</button><button data-valeur="frais" aria-pressed="false">Frais</button><button data-valeur="doux" aria-pressed="false">Doux</button><button data-valeur="chaud" aria-pressed="false">Chaud</button><button data-valeur="canicule" aria-pressed="false">Canicule</button><button data-valeur="aucune" aria-pressed="false">Aucune</button></div>
-</div>
-<div class="carte">
 <div class="titre-carte">Écran</div>
 <div class="texte2">Affiche l'alerte : le nombre de barres (gorgées) et le type de boisson</div>
 <div class="segment" role="group" aria-label="Nombre de barres" data-test="barres"><button data-valeur="1" aria-pressed="false">1 barre</button><button data-valeur="2" aria-pressed="false">2 barres</button><button data-valeur="3" aria-pressed="false">3 barres</button></div>
@@ -303,13 +320,28 @@ button:disabled{opacity:.5}
 <div class="titre-carte">Sexe</div>
 <div class="options" data-profil="sexe"><button data-valeur="M" aria-pressed="false">Homme</button><button data-valeur="F" aria-pressed="false">Femme</button><button data-valeur="NC" aria-pressed="false">Je ne souhaite pas donner cette information</button></div>
 </div>
+<div class="carte">
+<div class="titre-carte">Mon équipement</div>
+<div class="texte2">Dans cette version de démo, les données des capteurs que tu as sont simulées.</div>
+<div class="liste-lignes">
+<div class="ligne" ><span>Montre cardio</span><button class="interrupteur" role="switch" aria-checked="false" aria-label="Montre cardio" data-profil-switch="capteur_cardio"><span></span></button></div>
+<div class="ligne" ><span>Capteur de puissance (vélo)</span><button class="interrupteur" role="switch" aria-checked="false" aria-label="Capteur de puissance" data-profil-switch="capteur_puissance"><span></span></button></div>
+<div class="ligne" data-edit="ftp" data-si-puissance><span>Ta FTP<br><span class="petit texte2">la puissance que tu tiens environ une heure</span></span><span class="valeur" data-v="ftp">–</span></div>
+<div class="ligne" ><span>Vitesse par le GPS du téléphone (course)</span><button class="interrupteur" role="switch" aria-checked="false" aria-label="Vitesse par le GPS" data-profil-switch="capteur_gps"><span></span></button></div>
+<div class="ligne" data-edit="allure_ref"><span>Ton allure en sortie longue</span><span class="valeur" data-v="allure_ref">–</span></div>
+</div>
+</div>
+<div class="carte">
+<div class="titre-carte">Après une sortie, as-tu des traces blanches (de sel) sur tes vêtements ou ta casquette ?</div>
+<div class="segment" role="group" aria-label="Traces de sel" data-profil="sel"><button data-valeur="oui" aria-pressed="false">Oui, souvent</button><button data-valeur="non" aria-pressed="false">Non, jamais</button><button data-valeur="nsp" aria-pressed="false">Je ne sais pas</button></div>
+<span class="petit texte2" data-v="profil_sel"></span>
+</div>
 <div class="carte jaune">
-<span class="titre-carte" data-v="profil_sueur">Tu transpires environ – L par heure</span>
-<span data-v="profil_sel">C'est avec ça que je calcule tes gorgées.</span>
+<span class="titre-carte">Ta transpiration de référence</span>
+<span data-v="profil_sueur"></span>
 <span class="petit" data-v="profil_sueur_source"></span>
-<div class="segment" role="group" aria-label="Sueur salée" data-profil="sel"><button data-valeur="faible" aria-pressed="false">Peu salée</button><button data-valeur="moyenne" aria-pressed="false">Moyennement</button><button data-valeur="forte" aria-pressed="false">Très salée</button></div>
-<button class="bouton bleu" data-action="test_sueur">Refaire le test de transpiration</button>
-<span class="petit centre">Une pesée avant, une pesée après : 2 minutes</span>
+<div class="ligne" ><span>Affiner mes réglages avec des pesées<br><span class="petit">une case à cocher quand tu prépares ta sortie</span></span><button class="interrupteur" role="switch" aria-checked="false" aria-label="Affiner mes réglages avec des pesées" data-profil-switch="pesees_actives"><span></span></button></div>
+<button class="lien" data-action="effacer_pesees" data-si-pesees-faites hidden>Effacer mes pesées</button>
 </div>
 <div class="carte">
 <div class="titre-carte">Tes sports</div>
@@ -348,7 +380,7 @@ button:disabled{opacity:.5}
 <div class="ligne" ><span>Montre cardio</span><span class="badge">Simulée</span></div>
 <div class="ligne" ><span>Localisation GPS pour la météo</span><span class="badge">Bientôt</span></div>
 </div>
-<div class="petit texte2 marge">Ces services ont besoin d'Internet, que le Wi-Fi du boîtier ne fournit pas. En attendant, le cœur et la météo sont simulés.</div>
+<div class="petit texte2 marge">Ces services ont besoin d'Internet, que le Wi-Fi du boîtier ne fournit pas. En attendant, tes capteurs sont simulés et tu indiques la météo toi-même.</div>
 <h2>Confidentialité et RGPD</h2>
 <div class="carte liste-lignes">
 <div class="ligne" ><span>Enregistrer l'historique de mes sorties</span><button class="interrupteur" role="switch" aria-checked="false" aria-label="Enregistrer l'historique de mes sorties" data-switch="consent_historique"><span></span></button></div>
@@ -382,6 +414,15 @@ button:disabled{opacity:.5}
 <dialog id="retour" aria-labelledby="retour-titre">
 <div class="titre-carte" id="retour-titre">Comment s'est passée ta sortie ?</div>
 <div class="texte2">Tes réponses aident l'équipe à améliorer HydroPerf.</div>
+<div class="petit" data-v="retour_bilan"></div>
+<div class="groupe" data-retour-pesee hidden>
+<div class="question">Ta pesée</div>
+<label class="champ">Poids après la sortie<span><input type="number" inputmode="decimal" min="30" max="200" step="0.1" data-pesee="poids_apres"> kg</span></label>
+<div class="texte2 petit">Que reste-t-il dans tes bidons ?</div>
+<div class="segment grille" role="group" aria-label="Reste dans les bidons" data-retour="reste"><button data-valeur="vides" aria-pressed="false">Vides</button><button data-valeur="quart" aria-pressed="false">Un quart</button><button data-valeur="moitie" aria-pressed="false">La moitié</button><button data-valeur="pleins" aria-pressed="false">Pleins</button></div>
+<div class="texte2 petit">As-tu bu autre chose ou uriné pendant la sortie ?</div>
+<div class="segment" role="group" aria-label="Bu ou uriné en dehors" data-retour="hors"><button data-valeur="non" aria-pressed="false">Non</button><button data-valeur="oui" aria-pressed="false">Oui</button></div>
+</div>
 <div class="question">As-tu bu comme HydroPerf te l'a demandé ?</div>
 <div class="segment" role="group" aria-label="As-tu bu comme demandé ?" data-retour="a_bu"><button data-valeur="oui" aria-pressed="false">Oui</button><button data-valeur="en_partie" aria-pressed="false">En partie</button><button data-valeur="non" aria-pressed="false">Non</button></div>
 <div class="groupe" data-retour-pourquoi hidden>
@@ -442,9 +483,47 @@ const BOISSONS = {
   maison: {nom: "Boisson maison", couleur: "#5cc98a", de: "de boisson maison"},
 };
 const TAILLES_BIDON = [500, 600, 650, 750, 950];
-const SCENARIOS = {frais: "frais", doux: "doux", chaud: "chaud", canicule: "canicule"};
+// D'où vient l'estimation de l'effort (voir calculerEffort dans sortie.cpp)
+const SOURCES_EFFORT = {"puissance+cardio": "puissance + cardio", puissance: "puissance", "cardio+vitesse": "cardio + vitesse GPS",
+  vitesse: "vitesse GPS", cardio: "cardio", allure: "allure prévue", seance: "type de séance"};
+const PHASES = {echauffement: "Échauffement", effort: "Fraction", recup: "Récupération", calme: "Retour au calme"};
+// Modèles de fractionnés : effort en mètres, secondes ou minutes
+const MODELES = [
+  {nom: "10 × 400 m", echauffement_min: 15, repetitions: 10, effort: 400, effort_unite: "m", recup_s: 60, allure_effort: 0, retour_calme_min: 10},
+  {nom: "6 × 1 000 m", echauffement_min: 15, repetitions: 6, effort: 1000, effort_unite: "m", recup_s: 90, allure_effort: 0, retour_calme_min: 10},
+  {nom: "3 × 3 000 m", echauffement_min: 20, repetitions: 3, effort: 3000, effort_unite: "m", recup_s: 180, allure_effort: 0, retour_calme_min: 10},
+  {nom: "30/30", echauffement_min: 15, repetitions: 10, effort: 30, effort_unite: "s", recup_s: 30, allure_effort: 0, retour_calme_min: 10},
+  {nom: "3 × 10 min", echauffement_min: 15, repetitions: 3, effort: 10, effort_unite: "min", recup_s: 180, allure_effort: 0, retour_calme_min: 10},
+];
+// Réponse à « traces de sel » : moyenne de 830 mg/L, ± 1 écart-type (Baker 2016)
+const TRACES_SEL = {
+  oui: "Ta sueur est sans doute plus salée que la moyenne : je compte 1 100 mg de sodium par litre.",
+  non: "Ta sueur est sans doute moins salée que la moyenne : je compte 600 mg de sodium par litre.",
+  nsp: "Je compte la moyenne des sportifs : 830 mg de sodium par litre de sueur.",
+};
 const ML_PAR_OZ = 29.5735;
 const MI_PAR_KM = 0.621371;
+
+// Allure : "5:30" <-> 330 secondes par km (0 si vide ou illisible)
+function lireAllure(t) {
+  const m = String(t || "").trim().match(/^(\d{1,2})(?:\s*[:'’.,h]\s*(\d{1,2}))?$/);
+  const s = m ? Number(m[1]) * 60 + Number(m[2] || 0) : 0;
+  return s >= 120 && s <= 1200 ? s : 0;
+}
+const ecrireAllure = s => s > 0 ? `${Math.floor(s / 60)}:${deux(s % 60)}` : "";
+
+// Ne réécrit pas un champ pendant que l'utilisateur tape dedans
+function valeurChamp(el, v) {
+  if (el && document.activeElement !== el) el.value = v;
+}
+
+// « Pourquoi cette consigne ? » : le calcul en une phrase
+function explication(c) {
+  if (!c) return "";
+  const plafond = c.a_boire >= c.plafond - 0.005 ? ` (plafond de ${nombre(c.plafond)} L/h)` : "";
+  return `Sueur ${nombre(c.sueur, 2)} L/h = ${nombre(c.s_base, 2)} (ta base) × ${nombre(c.r_effort, 2)} (effort) × ${nombre(c.r_meteo, 2)} (météo). `
+    + `Tu en compenses ${Math.round(c.part * 100)} %, soit ${nombre(c.a_boire, 2)} L/h${plafond}.`;
+}
 
 function chrono(s) {
   return `${Math.floor(s / 3600)}:${deux(Math.floor(s / 60) % 60)}:${deux(s % 60)}`;
@@ -507,33 +586,31 @@ function afficherAccueil() {
   const e = etat;
   texte("accueil_message", e.active ? "Ta sortie est en cours, je m'occupe de tes gorgées !" : "On prépare ta prochaine sortie ?");
   $$('[data-action="preparer"]').forEach(b => b.textContent = e.active ? "Voir ma sortie" : "Préparer ma sortie");
-  if (e.meteo) {
-    texte("meteo_temp", temperature(e.meteo.temp));
-    texte("meteo_detail", `Ressenti ${temperature(e.meteo.ressenti)} · Humidité ${e.meteo.humidite} %`);
-    const scenario = SCENARIOS[e.meteo.scenario];
-    texte("meteo_source", `Météo simulée par le boîtier${scenario ? ` (scénario ${scenario})` : ""} : son Wi-Fi n'a pas accès à Internet.`);
-    texte("simulation_detail", `Météo actuelle : ${temperature(e.meteo.temp)}, ressenti ${temperature(e.meteo.ressenti)}. Change-la pour voir l'algorithme s'adapter.`);
-  } else if (e.sources) {
+  // Météo : le ressenti que l'utilisateur a indiqué pour sa sortie
+  const r = e.active ? e.ressenti : prep && prep.ressenti;
+  if (r !== null && r !== undefined) {
+    texte("meteo_temp", temperature(r));
+    texte("meteo_detail", e.active ? "ressentis pendant ta sortie" : "ressentis pour ta prochaine sortie");
+    texte("meteo_source", "Quand il fait chaud, HydroPerf augmente tes gorgées.");
+  } else {
     texte("meteo_temp", "–");
-    texte("meteo_detail", "Pas de météo");
-    texte("meteo_source", "Sans météo, HydroPerf calcule tes gorgées sans tenir compte de la chaleur.");
-    texte("simulation_detail", "Aucune météo : l'algorithme ne tient pas compte de la chaleur.");
+    texte("meteo_detail", "Pas de météo indiquée");
+    texte("meteo_source", "Indique la température ressentie en préparant ta sortie : sans elle, je ne tiens pas compte de la chaleur.");
   }
 }
 
 // Phrase qui dit d'où viennent l'effort et la météo utilisés pour les calculs
 function sourcesEstimation(e) {
   if (!e.sources) return "";
-  const effort = e.sources.effort === "cardio"
-    ? "Effort mesuré par ta montre (simulée)"
-    : `Effort estimé avec ta séance (${(SEANCES[e.seance] || "").toLowerCase()})`;
-  const meteo = e.sources.meteo === "aucune" ? "sans météo" : "météo simulée";
-  return `${effort} · ${meteo}`;
+  const mesures = [e.puissance != null && `${e.puissance} W`, e.vitesse != null && `${nombre(e.vitesse)} km/h`].filter(Boolean).join(" · ");
+  const effort = `Effort : ${SOURCES_EFFORT[e.sources.effort] || e.sources.effort}${mesures ? ` (${mesures})` : ""}`;
+  const meteo = e.sources.meteo === "saisie" ? `météo : ${temperature(e.ressenti)} ressentis` : "sans météo";
+  return `${effort} · ${meteo}${e.sources.simule ? " · capteurs simulés (démo)" : ""}`;
 }
 
-// Part de l'eau à compenser (80 % de l'eau perdue) réellement bue pendant la sortie
+// Part de ce qu'il fallait boire (calculé par l'algorithme) réellement bue pendant la sortie
 function respect(h) {
-  const besoin = 0.8 * h.perdue;
+  const besoin = h.a_boire ?? 0.8 * h.perdue;
   return besoin > 0 ? Math.min(1, h.bu / besoin) : 1;
 }
 
@@ -578,7 +655,8 @@ function afficherTableauDeBord() {
 // ================= Sortie : préparation =================
 
 function configParDefaut() {
-  return {sport: "course", seance: "footing", duree: 60, distance: 10, bidons: [{volume: 500, type: "eau", sucre: false, sel: false}]};
+  return {sport: "course", seance: "footing", duree: 60, distance: 10, ressenti: null, allure: 0,
+    bidons: [{volume: 500, type: "eau", sucre: false, sel: false, sodium: -1}]};
 }
 
 function copier(c) {
@@ -589,13 +667,42 @@ function chargerPreparation(c) {
   prep = copier(c || configParDefaut());
   prep.libre = !prep.duree && !prep.distance;
   if (prep.libre) { prep.duree = 60; prep.distance = 10; }
+  if (prep.ressenti === undefined) prep.ressenti = null;
+  prep.allure = prep.allure || 0;
+  prep.bidons.forEach(b => { if (b.sodium === undefined) b.sodium = -1; });
+  // Détail du fractionné, avec l'effort en m, s ou min pour le formulaire
+  const d = prep.detail;
+  prep.detailActif = !!(d && (d.effort_s || d.effort_m));
+  if (prep.detailActif) {
+    const minutes = !d.effort_m && d.effort_s >= 120 && d.effort_s % 60 === 0;
+    prep.detail = {echauffement_min: d.echauffement_min, repetitions: d.repetitions,
+      effort: d.effort_m || (minutes ? d.effort_s / 60 : d.effort_s), effort_unite: d.effort_m ? "m" : minutes ? "min" : "s",
+      recup_s: d.recup_s, allure_effort: d.allure_effort || 0, retour_calme_min: d.retour_calme_min};
+  } else {
+    prep.detail = copier(MODELES[1]);
+  }
+  delete prep.detail.nom;
+  // La pesée reste décochée par défaut
+  prep.pesee = false;
+  prep.poids_avant = config ? config.profil.poids : 0;
   afficherPreparation();
 }
 
 function configEnvoyee() {
   const c = copier(prep);
   if (c.libre) { c.duree = 0; c.distance = 0; }
+  // « Je ne sais pas » : envoyé en texte, car une valeur null serait ignorée à l'enregistrement
+  if (c.ressenti === null) c.ressenti = "nsp";
+  const d = c.detail;
+  c.detail = c.seance === "fractionne" && c.detailActif ? {
+    echauffement_min: d.echauffement_min, repetitions: d.repetitions,
+    effort_s: d.effort_unite === "s" ? d.effort : d.effort_unite === "min" ? d.effort * 60 : 0,
+    effort_m: d.effort_unite === "m" ? d.effort : 0,
+    recup_s: d.recup_s, allure_effort: d.allure_effort, retour_calme_min: d.retour_calme_min} : {};
+  c.pesee = !!(config && config.profil.pesees_actives && c.pesee);
+  if (!c.pesee) c.poids_avant = 0;
   delete c.libre;
+  delete c.detailActif;
   return c;
 }
 
@@ -606,7 +713,32 @@ function afficherPreparation() {
   selectionner($('[data-choix="nb_bidons"]'), prep.bidons.length);
   const libre = $('[data-switch="libre"]');
   libre.setAttribute("aria-checked", String(prep.libre));
-  $("[data-si-planifie]").hidden = prep.libre;
+  const velo = prep.sport === "velo";
+  const detail = prep.seance === "fractionne" && prep.detailActif;
+  $("[data-si-fractionne]").hidden = prep.seance !== "fractionne";
+  $('[data-switch="detail"]').setAttribute("aria-checked", String(detail));
+  $("[data-si-detail]").hidden = !detail;
+  // Avec le détail, la durée se calcule toute seule
+  $("[data-ligne-libre]").hidden = detail;
+  $("[data-si-planifie]").hidden = prep.libre || detail;
+  $("[data-si-duree-detail]").hidden = !detail;
+  if (detail) {
+    $("[data-modeles]").innerHTML = MODELES.map((m, i) => velo && m.effort_unite === "m" ? ""
+      : `<button class="puce" data-modele="${i}">${m.nom}</button>`).join("");
+    $$("[data-detail]").forEach(el => {
+      const cle = el.dataset.detail;
+      valeurChamp(el, cle === "allure_effort" ? ecrireAllure(prep.detail[cle]) : prep.detail[cle]);
+    });
+    $('[data-detail="effort_unite"] option[value="m"]').hidden = velo;
+    $("[data-si-allure-effort]").hidden = velo;
+  }
+  $("[data-si-allure]").hidden = velo;
+  valeurChamp($('[data-champ="allure"]'), ecrireAllure(prep.allure));
+  selectionner($('[data-choix="ressenti"]'), prep.ressenti === null ? "nsp" : prep.ressenti);
+  $("[data-si-pesees]").hidden = !(config && config.profil.pesees_actives);
+  $('[data-champ="pesee"]').checked = !!prep.pesee;
+  $$("[data-si-pesee]").forEach(e => e.hidden = !prep.pesee);
+  valeurChamp($('[data-champ="poids_avant"]'), prep.poids_avant || "");
   $('[data-champ="duree"]').value = prep.duree || "";
   $('[data-champ="distance"]').value = prep.distance ? versAffichageDistance(prep.distance) : "";
   $$('[data-unite="distance"]').forEach(e => e.textContent = imperial() ? "mi" : "km");
@@ -616,11 +748,17 @@ function afficherPreparation() {
     const options = Object.entries(BOISSONS).map(([cle, x]) => `<option value="${cle}"${cle === b.type ? " selected" : ""}>${x.nom}</option>`).join("");
     const maison = b.type === "maison" ? `<div class="cases">`
       + `<label><input type="checkbox" data-bidon="${i}" data-champ="sucre"${b.sucre ? " checked" : ""}> Sucrée</label>`
-      + `<label><input type="checkbox" data-bidon="${i}" data-champ="sel"${b.sel ? " checked" : ""}> Salée</label></div>` : "";
+      + `<label><input type="checkbox" data-bidon="${i}" data-champ="sel"${b.sel ? " checked" : ""}> Salée</label></div>`
+      + `<div class="petit texte2">Recette HydroPerf : 1 L d'eau, 1,5 g de sel (¼ de cuillère à café) et 60 g de sucre.</div>` : "";
+    // Composition facultative, lue sur l'étiquette (sinon : valeurs de référence de l'EFSA et de l'AIS)
+    const compo = b.type === "eau" ? "" : b.sodium >= 0
+      ? `<label class="champ">Sodium (étiquette)<span><input type="number" inputmode="numeric" min="0" max="300" data-bidon="${i}" data-champ="sodium" value="${b.sodium / 10}"> mg / 100 mL</span></label>`
+        + `<button class="lien" data-compo="${i}">Je ne connais pas la composition</button>`
+      : `<button class="lien" data-compo="${i}">Je connais la composition</button>`;
     return `<div class="bidon"><div class="bidon-titre"><span class="point" style="background:${BOISSONS[b.type].couleur}"></span>Bidon ${i + 1}</div>`
       + `<div class="champs"><label class="champ">Taille<span><input type="number" inputmode="numeric" list="tailles-bidon" min="1" `
       + `data-bidon="${i}" data-champ="volume" value="${versAffichageVolume(b.volume)}"> ${imperial() ? "fl oz" : "mL"}</span></label>`
-      + `<label class="champ">Contenu<span><select data-bidon="${i}" data-champ="type">${options}</select></span></label></div>${maison}</div>`;
+      + `<label class="champ">Contenu<span><select data-bidon="${i}" data-champ="type">${options}</select></span></label></div>${maison}${compo}</div>`;
   }).join("");
 
   $("[data-seances]").innerHTML = config && config.courses.length ? config.courses.map(c =>
@@ -637,7 +775,8 @@ function sauvegarderPreparation() {
   clearTimeout(minuteurSauvegarde);
   minuteurSauvegarde = setTimeout(() => {
     const c = configEnvoyee();
-    api("/api/seance", {sport: c.sport, seance: c.seance, duree: c.duree, distance: c.distance}).catch(() => {});
+    api("/api/seance", {sport: c.sport, seance: c.seance, duree: c.duree, distance: c.distance,
+      ressenti: c.ressenti, allure: c.allure, detail: c.detail}).catch(() => {});
     api("/api/bidons", {bidons: c.bidons}).catch(() => {});
   }, 800);
 }
@@ -662,6 +801,8 @@ function afficherPrevision(p) {
   texte("prev_detail", p.duree_estimee
     ? `Sur ${dureeMinutes(p.duree_estimee)}, tu perdras environ ${volume(p.perte)} d'eau et ${p.sodium} mg de sodium.`
     : `Tu transpires environ ${nombre(p.transpiration)} L par heure à cette allure.`);
+  texte("prev_calcul", explication(p.calcul));
+  texte("duree_detail", p.duree_estimee ? `Durée calculée avec ton fractionné : ${dureeMinutes(p.duree_estimee)}` : "");
   const alerte = $('[data-v="prev_alerte"]');
   const manque = p.objectif - p.capacite;
   alerte.hidden = manque <= 0;
@@ -671,6 +812,8 @@ function afficherPrevision(p) {
 // ================= Sortie : en direct =================
 
 let dernierRappel = null;
+let peseeEnCours = false;  // la sortie en cours a une pesée : le questionnaire la demandera
+let dureeEnCours = 0;
 
 function afficherLive() {
   const e = etat;
@@ -679,7 +822,11 @@ function afficherLive() {
   if (!e.active) return;
 
   texte("chrono", chrono(e.duree));
-  texte("live_sous_titre", `${SPORTS[e.sport] || ""} · ${SEANCES[e.seance] || ""}`);
+  peseeEnCours = !!e.pesee;
+  dureeEnCours = e.duree;
+  const ph = e.phase;
+  const numero = ph && (ph.nom === "effort" || ph.nom === "recup") ? ` ${ph.repetition}${ph.repetitions ? "/" + ph.repetitions : ""}` : "";
+  texte("live_sous_titre", `${SPORTS[e.sport] || ""} · ${SEANCES[e.seance] || ""}${ph ? ` · ${PHASES[ph.nom]}${numero}` : ""}`);
   const ratio = e.objectif ? e.bu / e.objectif : 0;
   remplirGoutte($('[data-goutte="sortie"]'), ratio);
 
@@ -692,19 +839,23 @@ function afficherLive() {
     texte("consigne_detail", "Pense à les remplir dès que possible");
   } else {
     texte("consigne_titre", e.pause ? "En pause" : "Tout roule");
-    texte("consigne_detail", e.pause ? "Les alertes sont arrêtées" : `Prochaine gorgée dans ${Math.max(1, Math.ceil(e.rappel / 60))} min`);
+    texte("consigne_detail", e.pause ? "Les alertes sont arrêtées"
+      : e.attente ? "Je garde ta gorgée pour la récupération"
+      : `Prochaine gorgée dans ${Math.max(1, Math.ceil(e.rappel / 60))} min`);
   }
 
   texte("live_bu", volume(e.bu));
   texte("live_plan", e.plan
-    ? `Plan : ${pluriel(e.plan.gorgees, "gorgée")} toutes les ${e.plan.intervalle} min, recalculé à chaque alerte. On part du principe que tu bois à chaque consigne.`
+    ? `Rythme actuel : ${pluriel(e.plan.gorgees, "gorgée")} toutes les ${e.plan.intervalle} min. On part du principe que tu bois à chaque consigne.`
     : "");
+  const gorgee = config ? config.reglages.gorgee : 30;
+  texte("pourquoi", e.calcul ? `${explication(e.calcul)} En retard : ${volume(e.calcul.compteur)} ; je te préviens dès 2 gorgées (${volume(2 * gorgee)}), au moins 5 min après la dernière alerte et au plus tard au bout de 20 min.` : "");
   texte("live_objectif", e.duree_prevue ? `sur ${volume(e.objectif)}` : `objectif du moment : ${volume(e.objectif)}`);
   $("[data-barre]").style.width = `${Math.min(100, ratio * 100)}%`;
   texte("fc", e.fc ?? "–");
   texte("perdue", volume(e.perdue));
   texte("sodium", `${e.sodium_perdu} mg`);
-  texte("temp", e.meteo ? temperature(e.meteo.ressenti) : "–");
+  texte("temp", e.ressenti != null ? temperature(e.ressenti) : "–");
   texte("live_sources", sourcesEstimation(e));
   texte("transpi", `${nombre(e.transpi)} L/h`);
   texte("km", distance(e.km));
@@ -754,12 +905,6 @@ function afficherCommandes(commandes) {
   });
 }
 
-const TEXTES_SEL = {
-  faible: "Et ta sueur est peu salée.",
-  moyenne: "Et ta sueur est moyennement salée.",
-  forte: "Et ta sueur est très salée : pense aux électrolytes.",
-};
-
 function afficherConfig() {
   const {profil, reglages} = config;
   appliquerTheme(reglages.theme);
@@ -768,11 +913,21 @@ function afficherConfig() {
   texte("taille", `${profil.taille} cm`);
   texte("fc_repos", `${profil.fc_repos} bpm`);
   texte("fc_max", `${profil.fc_max} bpm`);
-  texte("profil_sueur", `Tu transpires environ ${nombre(profil.sueur)} L par heure`);
-  texte("profil_sel", `${TEXTES_SEL[profil.sel] || ""} C'est avec ça que je calcule tes gorgées.`);
-  texte("profil_sueur_source", profil.sueur_mesuree
-    ? "Valeur mesurée par ton test de transpiration."
-    : "Valeur estimée avec ton poids et ton sexe : fais le test pour plus de précision.");
+  texte("ftp", profil.ftp ? `${profil.ftp} W` : "Je ne sais pas");
+  texte("allure_ref", profil.allure_ref ? `${ecrireAllure(profil.allure_ref)} /km` : "5:30 /km (par défaut)");
+  $$("[data-profil-switch]").forEach(b => b.setAttribute("aria-checked", String(!!profil[b.dataset.profilSwitch])));
+  $("[data-si-puissance]").hidden = !profil.capteur_puissance;
+  texte("profil_sel", TRACES_SEL[profil.sel] || TRACES_SEL.nsp);
+  const cal = config.calibration;
+  if (cal) {
+    texte("profil_sueur", `Course : ${nombre(cal.course.s_base, 2)} L/h · Vélo : ${nombre(cal.velo.s_base, 2)} L/h, `
+      + `pour une sortie longue à ${temperature(cal.at_ref)} ressentis.`);
+    texte("profil_sueur_source", cal.pesees
+      ? `Calculée avec ${pluriel(cal.pesees, "pesée")}. Effet de la chaleur : +${nombre(cal.k * 100)} % par degré`
+        + `${cal.k_personnel ? ", calculé avec tes pesées." : " (valeur par défaut : il faut deux pesées à au moins 8 °C d'écart pour le personnaliser)."}`
+      : "Estimée avec ton poids (course) et ta FTP (vélo). Active les pesées pour l'affiner.");
+    $("[data-si-pesees-faites]").hidden = !cal.pesees;
+  }
   selectionner($('[data-profil="sexe"]'), profil.sexe);
   selectionner($('[data-profil="sel"]'), profil.sel);
 
@@ -905,11 +1060,17 @@ const RAISONS = {alerte_ratee: "Alerte pas remarquée", pas_pratique: "Pas prati
 const DOSAGES = {bien: "Oui, c'était bien", trop_souvent: "Trop souvent", pas_assez: "Pas assez souvent",
   quantites: "Mauvaises quantités"};
 
-function ouvrirRetour() {
+// pesee : la sortie avait la case « Je me pèse aujourd'hui » ; h : son bilan (historique)
+function ouvrirRetour(pesee, h) {
   const d = $("#retour");
   $$("button[data-valeur]", d).forEach(b => b.setAttribute("aria-pressed", "false"));
-  $$("[data-retour-texte]", d).forEach(c => c.value = "");
+  $$("[data-retour-texte], [data-pesee]", d).forEach(c => c.value = "");
   $("[data-retour-pourquoi]", d).hidden = true;
+  $("[data-retour-pesee]", d).hidden = !pesee;
+  // Bilan : compenser après la sortie l'eau qui n'a pas été bue
+  const ecart = h ? Math.round((h.perdue - h.bu) / 50) * 50 : 0;
+  texte("retour_bilan", h ? `Tu as perdu environ ${volume(h.perdue)} d'eau en transpirant et bu ${volume(h.bu)}.`
+    + (ecart > 0 ? ` Dans les heures qui viennent, bois pour compenser l'écart (environ ${volume(ecart)}).` : "") : "");
   d.showModal();
 }
 
@@ -917,6 +1078,7 @@ function lireRetour() {
   const d = $("#retour");
   const choisi = cle => $(`[data-retour="${cle}"] [aria-pressed="true"]`, d)?.dataset.valeur || "";
   const aBu = choisi("a_bu");
+  const apres = parseFloat(($('[data-pesee="poids_apres"]', d).value || "").replace(",", "."));
   return {
     a_bu: aBu,
     // Les raisons ne comptent que si l'utilisateur n'a pas tout bu
@@ -924,6 +1086,8 @@ function lireRetour() {
     raison_autre: aBu === "oui" ? "" : $('[data-retour-texte="raison_autre"]', d).value.trim(),
     dosage: choisi("dosage"),
     remarques: $('[data-retour-texte="remarques"]', d).value.trim(),
+    pesee: !$("[data-retour-pesee]", d).hidden && apres > 0
+      ? {poids_apres: apres, reste: choisi("reste") || "vides", hors: choisi("hors") === "oui"} : undefined,
   };
 }
 
@@ -942,26 +1106,35 @@ const ACTIONS = {
   },
   async terminer() {
     if (!confirm("Terminer la sortie ?")) return;
+    const pesee = peseeEnCours, duree = dureeEnCours;
     await action("/api/sortie/terminer");
     await chargerHistorique().catch(() => {});
     aller("accueil");
-    if (!etat.active && !etat.horsLigne) ouvrirRetour();
+    const h = historique[historique.length - 1];
+    if (!etat.active && !etat.horsLigne) ouvrirRetour(pesee, h && Math.abs(h.duree - duree) <= 5 ? h : null);
   },
   passer_retour() {
     $("#retour").close();
   },
   async envoyer_retour() {
     const r = lireRetour();
-    if (!r.a_bu && !r.dosage && !r.remarques) {
+    if (!r.a_bu && !r.dosage && !r.remarques && !r.pesee) {
       return alert("Réponds à au moins une question, ou appuie sur Passer.");
     }
+    let reponse;
     try {
-      await api("/api/retour", r);
+      reponse = await api("/api/retour", r);
     } catch (e) {
       return alert("Impossible d'envoyer ton retour, le boîtier ne répond pas.");
     }
     $("#retour").close();
     chargerRetours().catch(() => {});
+    if (reponse && reponse.pesee) {
+      const p = reponse.pesee;
+      alert(p.erreur ? `Pesée non prise en compte : ${p.erreur}.`
+        : `Pesée enregistrée : tu as transpiré environ ${nombre(p.sueur, 2)} L par heure. Tes prochains calculs en tiennent compte.`);
+      chargerConfig().catch(() => {});
+    }
   },
   async exporter_retours() {
     try {
@@ -971,7 +1144,8 @@ const ACTIONS = {
     }
     if (!retours.length) return alert("Aucun retour pour l'instant.");
     const colonnes = ["date", "sport", "seance", "duree_min", "bu_ml", "objectif_ml", "alertes",
-      "a_bu_comme_demande", "raisons", "precision", "rappels_bien_doses", "remarques"];
+      "a_bu_comme_demande", "raisons", "precision", "rappels_bien_doses", "remarques",
+      "pesee_poids_avant", "pesee_poids_apres", "pesee_sueur_l_h"];
     const lignes = retours.map(r => {
       const sortie = r.sortie || {};
       const date = r.date || sortie.debut;
@@ -981,6 +1155,7 @@ const ACTIONS = {
         sortie.duree !== undefined ? Math.round(sortie.duree / 60) : "", sortie.bu, sortie.objectif, sortie.rappels,
         A_BU[r.a_bu] || r.a_bu, (r.raisons || []).map(x => RAISONS[x] || x).join(", "), r.raison_autre,
         DOSAGES[r.dosage] || r.dosage, r.remarques,
+        r.pesee && r.pesee.poids_avant, r.pesee && r.pesee.poids_apres, r.pesee && (r.pesee.sueur ?? r.pesee.erreur),
       ].map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(";");
     });
     const csv = "\ufeff" + [colonnes.join(";"), ...lignes].join("\n");
@@ -1013,29 +1188,19 @@ const ACTIONS = {
     if (message) envoyerEcran({message});
   },
 
-  async test_sueur() {
-    alert("Pèse-toi juste avant et juste après une sortie, sans tes affaires mouillées.");
-    const avant = demanderNombre("Poids avant la sortie (kg)", config.profil.poids, 30, 200);
-    if (avant === null) return;
-    const apres = demanderNombre("Poids après la sortie (kg)", avant, 30, 200);
-    if (apres === null) return;
-    const bu = demanderNombre("Quantité bue pendant la sortie (L)", 0.5, 0, 10);
-    if (bu === null) return;
-    const duree = demanderNombre("Durée de la sortie (minutes)", 60, 10, 1440);
-    if (duree === null) return;
-    // 1 kg perdu = 1 L d'eau
-    const sueur = Math.round((avant - apres + bu) / (duree / 60) * 10) / 10;
-    if (sueur <= 0) return alert("Le calcul donne une transpiration nulle, vérifie les valeurs.");
-    await modifier("/api/profil", {sueur, poids: apres});
+  async effacer_pesees() {
+    if (!confirm("Effacer toutes tes pesées ? HydroPerf reviendra aux valeurs estimées.")) return;
+    await modifier("/api/pesees/effacer", {});
   },
 
   exporter() {
-    const colonnes = ["date", "sport", "seance", "duree_min", "km", "bu_ml", "objectif_ml", "perdue_ml",
-      "sodium_perdu_mg", "sodium_apporte_mg", "fc_moy", "alertes"];
+    const colonnes = ["date", "sport", "seance", "duree_min", "ressenti_c", "km", "bu_ml", "objectif_ml", "a_boire_ml",
+      "perdue_ml", "sodium_perdu_mg", "sodium_apporte_mg", "fc_moy", "puissance_moy", "effort_moyen", "part_compensee", "alertes"];
     const lignes = historique.map(h => [
       h.debut ? new Date(h.debut * 1000).toLocaleString("fr-FR") : "",
-      SPORTS[h.sport] || h.sport, SEANCES[h.seance] || h.seance, Math.round(h.duree / 60), h.km, h.bu, h.objectif,
-      h.perdue, h.sodium_perdu, h.sodium_apporte, h.fc_moy || "", h.rappels,  // fc_moy = 0 : pas de montre
+      SPORTS[h.sport] || h.sport, SEANCES[h.seance] || h.seance, Math.round(h.duree / 60), h.ressenti, h.km, h.bu, h.objectif,
+      h.a_boire, h.perdue, h.sodium_perdu, h.sodium_apporte,
+      h.fc_moy || "", h.p_moy || "", h.r_effort_moy, h.part, h.rappels,  // 0 : pas de capteur
     ].map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(";"));
     const csv = "﻿" + [colonnes.join(";"), ...lignes].join("\n");
     const lien = document.createElement("a");
@@ -1073,6 +1238,18 @@ const EDITIONS = {
     return ["/api/reglages", "intervalle", demanderNombre("Un rappel toutes les ... minutes", config.reglages.intervalle, 1, 120)];
   },
   gorgee: () => ["/api/reglages", "gorgee", demanderNombre("Une gorgée, c'est ... mL", config.reglages.gorgee, 5, 200)],
+  ftp: () => ["/api/profil", "ftp", demanderNombre("Ta FTP en watts (0 si tu ne la connais pas)", config.profil.ftp, 0, 600)],
+  allure_ref: () => {
+    const reponse = prompt("Ton allure habituelle en sortie longue, par km (par exemple 5:30). Laisse vide si tu ne sais pas.",
+      ecrireAllure(config.profil.allure_ref));
+    if (reponse === null) return [null];
+    const allure = lireAllure(reponse);
+    if (reponse.trim() && !allure) {
+      alert("Écris ton allure comme 5:30 (entre 2:00 et 20:00 par km).");
+      return [null];
+    }
+    return ["/api/profil", "allure_ref", allure];
+  },
 };
 
 async function commander(valeurs) {
@@ -1125,8 +1302,11 @@ document.addEventListener("click", ev => {
     const choix = el.closest("[data-choix]").dataset.choix;
     if (choix === "nb_bidons") {
       const nb = Number(el.dataset.valeur);
-      while (prep.bidons.length < nb) prep.bidons.push({volume: 500, type: "eau", sucre: false, sel: false});
+      while (prep.bidons.length < nb) prep.bidons.push({volume: 500, type: "eau", sucre: false, sel: false, sodium: -1});
       prep.bidons.length = nb;
+    } else if (choix === "ressenti") {
+      prep.ressenti = el.dataset.valeur === "nsp" ? null : Number(el.dataset.valeur);
+      afficherAccueil();
     } else {
       prep[choix] = el.dataset.valeur;
     }
@@ -1136,11 +1316,30 @@ document.addEventListener("click", ev => {
     prep.libre = !prep.libre;
     return afficherPreparation();
   }
+  if ((el = t.closest('[data-switch="detail"]')) && prep) {
+    prep.detailActif = !prep.detailActif;
+    return afficherPreparation();
+  }
+  if ((el = t.closest("[data-modele]")) && prep) {
+    prep.detail = copier(MODELES[Number(el.dataset.modele)]);
+    delete prep.detail.nom;
+    return afficherPreparation();
+  }
+  if ((el = t.closest("[data-compo]")) && prep) {
+    const b = prep.bidons[Number(el.dataset.compo)];
+    // Valeur de départ : celle de référence du type de boisson
+    b.sodium = b.sodium >= 0 ? -1 : {isotonique: 600, electrolyte: 900}[b.type] ?? 600;
+    return afficherPreparation();
+  }
 
   // Onglet Test : choix des barres et de la boisson
   if ((el = t.closest("[data-test] button[data-valeur]"))) return selectionner(el.closest("[data-test]"), el.dataset.valeur);
 
   if (!config) return;
+  if ((el = t.closest("[data-profil-switch]"))) {
+    const cle = el.dataset.profilSwitch;
+    return modifier("/api/profil", {[cle]: !config.profil[cle]});
+  }
   if ((el = t.closest("[data-profil] button[data-valeur]"))) {
     return modifier("/api/profil", {[el.closest("[data-profil]").dataset.profil]: el.dataset.valeur});
   }
@@ -1169,6 +1368,13 @@ document.addEventListener("input", ev => {
   if (el.dataset.champ === "duree" && !el.dataset.bidon) prep.duree = Math.max(0, Math.round(Number(el.value) || 0));
   else if (el.dataset.champ === "distance") prep.distance = Math.max(0, depuisAffichageDistance(Number(el.value) || 0));
   else if (el.dataset.bidon !== undefined && el.dataset.champ === "volume") prep.bidons[el.dataset.bidon].volume = depuisAffichageVolume(Number(el.value) || 0);
+  else if (el.dataset.bidon !== undefined && el.dataset.champ === "sodium") prep.bidons[el.dataset.bidon].sodium = Math.max(0, Math.round((Number(el.value) || 0) * 10));
+  else if (el.dataset.champ === "allure") prep.allure = lireAllure(el.value);
+  else if (el.dataset.champ === "poids_avant") prep.poids_avant = parseFloat(el.value.replace(",", ".")) || 0;
+  else if (el.dataset.detail && el.dataset.detail !== "effort_unite") {
+    const cle = el.dataset.detail;
+    prep.detail[cle] = cle === "allure_effort" ? lireAllure(el.value) : Math.max(0, Number(el.value) || 0);
+  }
   else return;
   demanderPrevision();
 });
@@ -1176,6 +1382,14 @@ document.addEventListener("input", ev => {
 document.addEventListener("change", ev => {
   const el = ev.target;
   if (el.dataset.range) return modifier("/api/reglages", {[el.dataset.range]: Math.round(Number(el.value) * Number(el.dataset.facteur || 1))});
+  if (prep && el.dataset.champ === "pesee") {
+    prep.pesee = el.checked;
+    return afficherPreparation();
+  }
+  if (prep && el.dataset.detail === "effort_unite") {
+    prep.detail.effort_unite = el.value;
+    return demanderPrevision();
+  }
   if (!prep || el.dataset.bidon === undefined) return;
   const b = prep.bidons[el.dataset.bidon];
   if (el.dataset.champ === "type") {
