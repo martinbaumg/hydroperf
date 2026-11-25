@@ -169,6 +169,32 @@ def test_simuler_en_entier():
     assert r["totaux"]["bu"] == r["serie"]["bu"][-1]
 
 
+def test_premier_rappel_et_acceleration():
+    """Au départ, le prochain rappel est estimé avec le débit prévu (pas 20 min) ; ×8 avance 8 s par seconde."""
+    reinitialiser(capteur_cardio=True, poids=72)
+    fb.s = fb.demarrer(fb.normaliser({"sport": "course", "seance": "longue", "distance": 10, "allure": 330,
+                                      "bidons": [{"volume": 500, "type": "eau"}]}))
+    fb.tick(1)
+    assert fb.secondes_avant_alerte() < 600, fb.secondes_avant_alerte()
+    fb.acceleration = 8
+    fb.seconde_reelle()
+    assert fb.s["duree"] == 9
+    fb.acceleration = 1
+
+
+def test_pesee_manuelle():
+    """Pesée faite avant le boîtier : 1 h de course à 5:30, 72,4 → 71,7 kg et 0,3 L bus : 1,0 L/h."""
+    reinitialiser(allure_ref=330)
+    r = fb.pesee_manuelle({"sport": "course", "seance": "longue", "duree": 60, "poids_avant": 72.4, "poids_apres": 71.7,
+                           "bu": 300, "ressenti": 18, "allure": 330})
+    assert r["enregistree"] and r["r_effort"] == 1.0, r
+    proche(r["sueur"], 1.0)
+    cal = fb.calibration("course")
+    assert cal["pesees"] == 1 and cal["at_ref"] == 18
+    proche(cal["s_base"], 1.0)
+    assert "erreur" in fb.pesee_manuelle({"sport": "course", "duree": 20, "poids_avant": 72, "poids_apres": 71})
+
+
 if __name__ == "__main__":
     tests = [(nom, f) for nom, f in list(globals().items()) if nom.startswith("test_")]
     for nom, f in tests:

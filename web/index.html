@@ -222,12 +222,12 @@ button:disabled{opacity:.5}
 <div class="ligne" data-ligne-libre><span>On verra comment je me sens</span><button class="interrupteur" role="switch" aria-checked="false" aria-label="On verra comment je me sens" data-switch="libre"><span></span></button></div>
 <div class="champs" data-si-planifie>
 <label class="champ">Durée<span><input type="number" inputmode="numeric" min="5" max="1440" step="5" data-champ="duree"> min</span></label>
-<label class="champ">Distance<span><input type="number" inputmode="decimal" min="0" max="500" step="0.5" data-champ="distance"> <span data-unite="distance">km</span></span></label>
+<label class="champ">Distance<span><input type="text" inputmode="decimal" data-champ="distance"> <span data-unite="distance">km</span></span></label>
 </div>
 <div class="gras" data-v="duree_detail" data-si-duree-detail hidden></div>
 <div class="champs">
 <label class="champ" data-si-allure>Allure prévue<span><input type="text" inputmode="decimal" data-champ="allure"> /km</span></label>
-<label class="champ" data-si-vitesse>Vitesse prévue<span><input type="number" inputmode="decimal" min="0" max="60" step="0.5" data-champ="vitesse"> km/h</span></label>
+<label class="champ" data-si-vitesse>Vitesse prévue<span><input type="text" inputmode="decimal" data-champ="vitesse"> km/h</span></label>
 <label class="champ" data-si-denivele>Dénivelé positif<span><input type="number" inputmode="numeric" min="0" max="10000" step="50" data-champ="denivele"> m</span></label>
 </div>
 <div class="petit texte2" data-si-planifie>Remplis ce que tu connais : avec deux valeurs sur trois, je calcule la dernière (en gris).</div>
@@ -239,7 +239,7 @@ button:disabled{opacity:.5}
 </div>
 <div class="carte" data-si-pesees hidden>
 <div class="cases"><label><input type="checkbox" data-champ="pesee"> Je me pèse aujourd'hui</label></div>
-<label class="champ" data-si-pesee hidden>Poids avant la sortie<span><input type="number" inputmode="decimal" min="30" max="200" step="0.1" data-champ="poids_avant"> kg</span></label>
+<label class="champ" data-si-pesee hidden>Poids avant la sortie<span><input type="text" inputmode="decimal" data-champ="poids_avant"> kg</span></label>
 <div class="petit texte2" data-si-pesee hidden>Pèse-toi juste avant de partir et juste en rentrant, sans tes affaires mouillées. Je te demanderai ton poids à la fin.</div>
 </div>
 <div class="carte">
@@ -291,6 +291,11 @@ button:disabled{opacity:.5}
 <div class="rangee">
 <button class="bouton secondaire" data-action="pause">Pause</button>
 <button class="bouton bleu" data-action="terminer">Terminer</button>
+</div>
+<div class="carte">
+<div class="titre-carte">Accélérer la démo</div>
+<div class="segment" role="group" aria-label="Vitesse de la démo" data-acceleration><button data-valeur="1" aria-pressed="true">×1</button><button data-valeur="2" aria-pressed="false">×2</button><button data-valeur="4" aria-pressed="false">×4</button><button data-valeur="8" aria-pressed="false">×8</button><button data-valeur="16" aria-pressed="false">×16</button></div>
+<div class="petit texte2">Le temps de la sortie passe plus vite ; les alertes arrivent pour de vrai sur le boîtier.</div>
 </div>
 <button class="bouton principal" data-action="simuler_tout">Simuler la course en entier</button>
 <div class="petit texte2 centre">Pour la démo : la fin de la sortie est simulée d'un coup, puis tu vois son résumé.</div>
@@ -407,6 +412,7 @@ button:disabled{opacity:.5}
 <span data-v="profil_sueur"></span>
 <span class="petit" data-v="profil_sueur_source"></span>
 <div class="ligne" ><span>Affiner mes réglages avec des pesées<br><span class="petit">une case à cocher quand tu prépares ta sortie</span></span><button class="interrupteur" role="switch" aria-checked="false" aria-label="Affiner mes réglages avec des pesées" data-profil-switch="pesees_actives"><span></span></button></div>
+<button class="bouton bleu" data-action="ouvrir_pesee">Ajouter une pesée déjà faite</button>
 <button class="lien" data-action="effacer_pesees" data-si-pesees-faites hidden>Effacer mes pesées</button>
 </div>
 <div class="carte">
@@ -477,13 +483,26 @@ button:disabled{opacity:.5}
 <div class="legal" data-v="legal_texte"></div>
 <button class="bouton bleu" data-action="fermer_legal">J'ai compris</button>
 </dialog>
+<dialog id="pesee-manuelle" aria-labelledby="pesee-titre">
+<div class="titre-carte" id="pesee-titre">Ajouter une pesée déjà faite</div>
+<div class="texte2 petit">Une pesée juste avant et juste après une sortie d'au moins 30 min, sans les affaires mouillées.</div>
+<div class="segment" role="group" aria-label="Sport" data-pm="sport"><button data-valeur="course" aria-pressed="true">Course</button><button data-valeur="trail" aria-pressed="false">Trail</button><button data-valeur="velo" aria-pressed="false">Vélo</button></div>
+<label class="champ">Type de séance<span><select data-pm-champ="seance" aria-label="Type de séance"></select></span></label>
+<div class="champs"><label class="champ">Durée<span><input type="text" inputmode="numeric" data-pm-champ="duree"> min</span></label><label class="champ">Eau bue<span><input type="text" inputmode="numeric" data-pm-champ="bu"> mL</span></label></div>
+<div class="champs"><label class="champ">Poids avant<span><input type="text" inputmode="decimal" data-pm-champ="poids_avant"> kg</span></label><label class="champ">Poids après<span><input type="text" inputmode="decimal" data-pm-champ="poids_apres"> kg</span></label></div>
+<label class="champ">Température ressentie (vide si tu ne sais pas)<span><input type="text" inputmode="numeric" data-pm-champ="ressenti"> °C</span></label>
+<div class="texte2 petit">Si tu les connais (montre, capteur), pour mieux tenir compte de l'effort :</div>
+<div class="champs"><label class="champ">Cœur moyen<span><input type="text" inputmode="numeric" data-pm-champ="fc_moy"> bpm</span></label><label class="champ" data-pm-si="course">Allure moyenne<span><input type="text" inputmode="decimal" placeholder="5:30" data-pm-champ="allure"> /km</span></label><label class="champ" data-pm-si="velo">Puissance moy.<span><input type="text" inputmode="numeric" data-pm-champ="puissance_moy"> W</span></label></div>
+<div class="cases"><label><input type="checkbox" data-pm-champ="hors"> Je suis allé aux toilettes pendant la sortie</label></div>
+<div class="rangee"><button class="bouton secondaire" data-action="fermer_pesee">Annuler</button><button class="bouton bleu" data-action="envoyer_pesee">Enregistrer</button></div>
+</dialog>
 <dialog id="retour" aria-labelledby="retour-titre">
 <div class="titre-carte" id="retour-titre">Comment s'est passée ta sortie ?</div>
 <div class="texte2">Tes réponses aident l'équipe à améliorer HydroPerf.</div>
 <div class="petit" data-v="retour_bilan"></div>
 <div class="groupe" data-retour-pesee hidden>
 <div class="question">Ta pesée</div>
-<label class="champ">Poids après la sortie<span><input type="number" inputmode="decimal" min="30" max="200" step="0.1" data-pesee="poids_apres"> kg</span></label>
+<label class="champ">Poids après la sortie<span><input type="text" inputmode="decimal" data-pesee="poids_apres"> kg</span></label>
 <div class="texte2 petit">Que reste-t-il dans tes bidons ?</div>
 <div class="segment grille" role="group" aria-label="Reste dans les bidons" data-retour="reste"><button data-valeur="vides" aria-pressed="false">Vides</button><button data-valeur="quart" aria-pressed="false">Un quart</button><button data-valeur="moitie" aria-pressed="false">La moitié</button><button data-valeur="pleins" aria-pressed="false">Pleins</button></div>
 <div class="texte2 petit">As-tu bu autre chose ou uriné pendant la sortie ?</div>
@@ -582,9 +601,16 @@ const MI_PAR_KM = 0.621371;
 
 // Allure : "5:30" <-> 330 secondes par km (0 si vide ou illisible)
 function lireAllure(t) {
-  const m = String(t || "").trim().match(/^(\d{1,2})(?:\s*[:'’.,h]\s*(\d{1,2}))?$/);
-  const s = m ? Number(m[1]) * 60 + Number(m[2] || 0) : 0;
+  const texte = String(t || "").trim();
+  let m = texte.match(/^(\d{1,2})(?:\s*[:'’.,h]\s*(\d{1,2}))?$/);
+  if (!m) m = texte.match(/^(\d{1,2})(\d{2})$/);  // « 530 » = 5:30
+  const s = m && Number(m[2] || 0) < 60 ? Number(m[1]) * 60 + Number(m[2] || 0) : 0;
   return s >= 120 && s <= 1200 ? s : 0;
+}
+// Nombre tapé au clavier, avec une virgule ou un point (0 si vide ou illisible)
+function lireNombre(t) {
+  const n = parseFloat(String(t || "").replace(/\s/g, "").replace(",", "."));
+  return isNaN(n) ? 0 : n;
 }
 const ecrireAllure = s => s > 0 ? `${Math.floor(s / 60)}:${deux(s % 60)}` : "";
 
@@ -741,6 +767,7 @@ function copier(c) {
 
 function chargerPreparation(c) {
   prep = copier(c || configParDefaut());
+  ordreTrio = [];
   prep.libre = !prep.duree && !prep.distance;
   if (prep.libre) { prep.duree = 60; prep.distance = 10; }
   if (prep.ressenti === undefined) prep.ressenti = null;
@@ -786,11 +813,33 @@ function rythmeCalcule() {
   return allure >= 120 && allure <= 1200 ? allure : 0;
 }
 
+// Durée, distance et allure (ou vitesse à vélo) : avec deux valeurs, la troisième se calcule.
+// Si les trois sont remplies, celle saisie depuis le plus longtemps est vidée pour être recalculée.
+let ordreTrio = [];
+const cleRythme = () => prep.sport === "velo" ? "vitesse" : "allure";
+function noterTrio(champ) {  // "duree", "distance" ou "rythme"
+  ordreTrio = ordreTrio.filter(c => c !== champ);
+  const rempli = {duree: prep.duree > 0, distance: prep.distance > 0, rythme: vitesseDonnee() > 0};
+  if (!rempli[champ]) return;
+  ordreTrio.push(champ);
+  if (!(rempli.duree && rempli.distance && rempli.rythme)) return;
+  const autres = ["duree", "distance", "rythme"].filter(c => c !== champ);
+  const vieux = autres.sort((a, b) => ordreTrio.indexOf(a) - ordreTrio.indexOf(b))[0];
+  if (vieux === "rythme") prep[cleRythme()] = 0;
+  else prep[vieux] = 0;
+  ordreTrio = ordreTrio.filter(c => c !== vieux);
+  $(`[data-champ="${vieux === "rythme" ? cleRythme() : vieux}"]`).value = "";
+}
+
 // Valeurs calculées, affichées en gris dans les cases vides
-function afficherCalculs(dureeEstimee) {
+let derniereDureeEstimee = 0;
+function afficherCalculs(dureeEstimee = derniereDureeEstimee) {
   if (!prep) return;
+  derniereDureeEstimee = dureeEstimee;
   const vit = vitesseDonnee(), rythme = rythmeCalcule();
-  $('[data-champ="duree"]').placeholder = !prep.duree && prep.distance && dureeEstimee ? `≈ ${dureeEstimee}` : "";
+  // Durée : avec l'allure (ou la vitesse) donnée, sinon celle estimée par le boîtier avec une allure habituelle
+  const duree = !prep.duree && prep.distance ? (vit ? Math.round(kmEffort(prep.distance) / vit * 60) : dureeEstimee) : 0;
+  $('[data-champ="duree"]').placeholder = duree ? `≈ ${duree}` : "";
   const km = prep.duree && vit ? prep.duree / 60 * vit - (prep.sport === "trail" ? prep.denivele / 100 : 0) : 0;
   $('[data-champ="distance"]').placeholder = !prep.distance && km > 0 ? `≈ ${nombre(versAffichageDistance(km))}` : "";
   $('[data-champ="allure"]').placeholder = prep.sport !== "velo" && rythme ? `≈ ${ecrireAllure(rythme)}` : "ex. 5:30";
@@ -874,8 +923,8 @@ function afficherPreparation() {
     const connue = b.sodium >= 0 || b.glucides >= 0;
     const compo = b.type === "eau" ? "" : connue
       ? `<div class="petit texte2">Lis l'étiquette, pour 100 mL de boisson prête à boire :</div>`
-        + `<div class="champs"><label class="champ">Sodium<span><input type="number" inputmode="decimal" min="0" max="300" data-bidon="${i}" data-champ="sodium" value="${Math.max(0, b.sodium) / 10}"> mg</span></label>`
-        + `<label class="champ">Glucides<span><input type="number" inputmode="decimal" min="0" max="20" step="0.1" data-bidon="${i}" data-champ="glucides" value="${Math.max(0, b.glucides) / 10}"> g</span></label></div>`
+        + `<div class="champs"><label class="champ">Sodium<span><input type="text" inputmode="decimal" data-bidon="${i}" data-champ="sodium" value="${Math.max(0, b.sodium) / 10}"> mg</span></label>`
+        + `<label class="champ">Glucides<span><input type="text" inputmode="decimal" data-bidon="${i}" data-champ="glucides" value="${Math.max(0, b.glucides) / 10}"> g</span></label></div>`
         + `<button class="lien" data-compo="${i}">Je ne connais pas la composition</button>`
       : `<button class="lien" data-compo="${i}">Je connais la composition</button>`;
     return `<div class="bidon"><div class="bidon-titre"><span class="point" style="background:${BOISSONS[b.type].couleur}"></span>Bidon ${i + 1}</div>`
@@ -970,6 +1019,7 @@ function afficherLive() {
   }
 
   texte("live_bu", volume(e.bu));
+  selectionner($("[data-acceleration]"), e.acceleration || 1);
   texte("live_apports", `Apportés par tes boissons : ${e.sodium_apporte} mg de sodium et ${e.glucides ?? 0} g de glucides.`);
   texte("live_plan", e.plan
     ? `Rythme actuel : ${pluriel(e.plan.gorgees, "gorgée")} toutes les ${e.plan.intervalle} min. On part du principe que tu bois à chaque consigne.`
@@ -1020,6 +1070,16 @@ function prevenirTelephone() {
 document.addEventListener("click", () => {
   try { if (!audio) audio = new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); } catch (e) {}
 }, {once: true});
+
+// Formulaire « pesée déjà faite » : séances et champs selon le sport
+function afficherPeseeManuelle(sport) {
+  const d = $("#pesee-manuelle");
+  selectionner($('[data-pm="sport"]', d), sport);
+  $('[data-pm-champ="seance"]', d).innerHTML = SEANCES_PAR_SPORT[sport].map((k, i) =>
+    `<option value="${k}"${i === 1 ? " selected" : ""}>${SEANCES[k]}</option>`).join("");  // sortie longue ou endurance
+  $('[data-pm-si="course"]', d).hidden = sport !== "course";
+  $('[data-pm-si="velo"]', d).hidden = sport !== "velo";
+}
 
 // ================= Résumé de la sortie (démo : « Simuler la course en entier ») =================
 
@@ -1410,7 +1470,7 @@ function lireRetour() {
   const d = $("#retour");
   const choisi = cle => $(`[data-retour="${cle}"] [aria-pressed="true"]`, d)?.dataset.valeur || "";
   const aBu = choisi("a_bu");
-  const apres = parseFloat(($('[data-pesee="poids_apres"]', d).value || "").replace(",", "."));
+  const apres = lireNombre($('[data-pesee="poids_apres"]', d).value);
   return {
     a_bu: aBu,
     // Les raisons ne comptent que si l'utilisateur n'a pas tout bu
@@ -1546,6 +1606,39 @@ const ACTIONS = {
     if (message) envoyerEcran({message});
   },
 
+  ouvrir_pesee() {
+    const d = $("#pesee-manuelle");
+    $$("input[type=text]", d).forEach(c => c.value = "");
+    $('[data-pm-champ="hors"]', d).checked = false;
+    afficherPeseeManuelle(prep ? prep.sport : "course");
+    d.showModal();
+  },
+  fermer_pesee() {
+    $("#pesee-manuelle").close();
+  },
+  async envoyer_pesee() {
+    const d = $("#pesee-manuelle");
+    const v = cle => $(`[data-pm-champ="${cle}"]`, d).value;
+    const ressenti = v("ressenti").trim();
+    const corps = {
+      sport: $('[data-pm="sport"] [aria-pressed="true"]', d).dataset.valeur, seance: v("seance"),
+      duree: lireNombre(v("duree")), bu: lireNombre(v("bu")),
+      poids_avant: lireNombre(v("poids_avant")), poids_apres: lireNombre(v("poids_apres")),
+      ressenti: ressenti ? lireNombre(ressenti) : "nsp",
+      fc_moy: lireNombre(v("fc_moy")), allure: lireAllure(v("allure")), puissance_moy: lireNombre(v("puissance_moy")),
+      hors: $('[data-pm-champ="hors"]', d).checked,
+    };
+    let r;
+    try {
+      r = await api("/api/pesee", corps);
+    } catch (e) {
+      return horsLigne();
+    }
+    if (r.erreur) return alert(`Pesée non prise en compte : ${r.erreur}.`);
+    d.close();
+    alert(`Pesée enregistrée : tu as transpiré environ ${nombre(r.sueur, 2)} L par heure. Tes prochains calculs en tiennent compte.`);
+    chargerConfig().catch(() => {});
+  },
   async effacer_pesees() {
     if (!confirm("Effacer toutes tes pesées ? HydroPerf reviendra aux valeurs estimées.")) return;
     await modifier("/api/pesees/effacer", {});
@@ -1631,6 +1724,11 @@ document.addEventListener("click", ev => {
   let el;
 
   if ((el = t.closest("[data-commande]"))) return commander(JSON.parse(el.dataset.commande));
+  if ((el = t.closest("[data-acceleration] button[data-valeur]"))) {
+    selectionner(el.closest("[data-acceleration]"), el.dataset.valeur);
+    return api("/api/sortie/vitesse", {x: Number(el.dataset.valeur)}).then(rafraichir).catch(horsLigne);
+  }
+  if ((el = t.closest('[data-pm="sport"] button[data-valeur]'))) return afficherPeseeManuelle(el.dataset.valeur);
   if ((el = t.closest("[data-ecran]"))) return envoyerEcran(JSON.parse(el.dataset.ecran));
   if ((el = t.closest("[data-supprimer-seance]"))) {
     ev.stopPropagation();
@@ -1732,13 +1830,13 @@ document.addEventListener("input", ev => {
   const el = ev.target;
   if (el.dataset.range) return afficherCurseur(el);
   if (!prep) return;
-  if (el.dataset.champ === "duree" && !el.dataset.bidon) prep.duree = Math.max(0, Math.round(Number(el.value) || 0));
-  else if (el.dataset.champ === "distance") prep.distance = Math.max(0, depuisAffichageDistance(Number(el.value) || 0));
+  if (el.dataset.champ === "duree" && !el.dataset.bidon) { prep.duree = Math.max(0, Math.round(lireNombre(el.value))); noterTrio("duree"); afficherCalculs(); }
+  else if (el.dataset.champ === "distance") { prep.distance = Math.max(0, depuisAffichageDistance(lireNombre(el.value))); noterTrio("distance"); afficherCalculs(); }
   else if (el.dataset.bidon !== undefined && el.dataset.champ === "volume") prep.bidons[el.dataset.bidon].volume = depuisAffichageVolume(Number(el.value) || 0);
-  else if (el.dataset.bidon !== undefined && el.dataset.champ === "sodium") prep.bidons[el.dataset.bidon].sodium = Math.max(0, Math.round((Number(el.value) || 0) * 10));
-  else if (el.dataset.bidon !== undefined && el.dataset.champ === "glucides") prep.bidons[el.dataset.bidon].glucides = Math.max(0, Math.round((parseFloat(el.value.replace(",", ".")) || 0) * 10));
-  else if (el.dataset.champ === "allure") prep.allure = lireAllure(el.value);
-  else if (el.dataset.champ === "vitesse") prep.vitesse = Math.max(0, parseFloat(el.value.replace(",", ".")) || 0);
+  else if (el.dataset.bidon !== undefined && el.dataset.champ === "sodium") prep.bidons[el.dataset.bidon].sodium = Math.max(0, Math.round(lireNombre(el.value) * 10));
+  else if (el.dataset.bidon !== undefined && el.dataset.champ === "glucides") prep.bidons[el.dataset.bidon].glucides = Math.max(0, Math.round(lireNombre(el.value) * 10));
+  else if (el.dataset.champ === "allure") { prep.allure = lireAllure(el.value); noterTrio("rythme"); afficherCalculs(); }
+  else if (el.dataset.champ === "vitesse") { prep.vitesse = Math.max(0, lireNombre(el.value)); noterTrio("rythme"); afficherCalculs(); }
   else if (el.dataset.champ === "denivele") prep.denivele = Math.max(0, Math.round(Number(el.value) || 0));
   else if (el.dataset.champ === "ressenti") {
     const v = parseFloat(el.value.replace(",", "."));
@@ -1746,7 +1844,7 @@ document.addEventListener("input", ev => {
     $("[data-ressenti-nsp]").setAttribute("aria-pressed", String(prep.ressenti === null));
     afficherAccueil();
   }
-  else if (el.dataset.champ === "poids_avant") prep.poids_avant = parseFloat(el.value.replace(",", ".")) || 0;
+  else if (el.dataset.champ === "poids_avant") prep.poids_avant = lireNombre(el.value);
   else if (el.dataset.detail && el.dataset.detail !== "effort_unite") {
     const cle = el.dataset.detail;
     prep.detail[cle] = cle === "allure_effort" ? lireAllure(el.value) : Math.max(0, Number(el.value) || 0);
@@ -1758,6 +1856,7 @@ document.addEventListener("input", ev => {
 document.addEventListener("change", ev => {
   const el = ev.target;
   if (el.dataset.range) return modifier("/api/reglages", {[el.dataset.range]: Math.round(Number(el.value) * Number(el.dataset.facteur || 1))});
+  if (prep && el.dataset.champ === "allure" && prep.allure) el.value = ecrireAllure(prep.allure);
   if (prep && el.dataset.champ === "pesee") {
     prep.pesee = el.checked;
     return afficherPreparation();

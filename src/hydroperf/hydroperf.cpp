@@ -212,6 +212,21 @@ static void definirRoutes() {
   });
 
   server.on("/api/pesees/effacer", HTTP_POST, []() { effacerPesees(); envoyerConfig(); });
+  // Pesée faite avant d'avoir le boîtier (Profil > Ajouter une pesée)
+  server.on("/api/pesee", HTTP_POST, []() {
+    JsonDocument recu;
+    if (!lireCorps(recu)) return;
+    JsonDocument doc;
+    peseeManuelle(recu.as<JsonVariantConst>(), doc.to<JsonObject>());
+    envoyerJson(doc);
+  });
+  // Démo : {"x": 1|2|4|8|16}
+  server.on("/api/sortie/vitesse", HTTP_POST, []() {
+    JsonDocument recu;
+    if (!lireCorps(recu)) return;
+    sortieAccelerer(recu["x"] | 1);
+    envoyerOk();
+  });
 
   // L'ESP32 n'a pas d'horloge : le téléphone lui donne l'heure (secondes Unix)
   server.on("/api/heure", HTTP_POST, []() {

@@ -38,3 +38,9 @@ void calibrationEtat(JsonObject o);
 // Pesée de fin de sortie (questionnaire) : {"poids_apres", "reste":"vides|quart|moitie|pleins", "hors"}
 // Ajoute un point de calibration au profil. false si la dernière sortie n'avait pas de pesée.
 bool sortiePesee(JsonVariantConst recu, JsonObject resultat);
+
+// Pesée faite avant d'avoir le boîtier, saisie dans le profil (voir sortie.cpp pour les champs)
+void peseeManuelle(JsonVariantConst recu, JsonObject resultat);
+
+// Démo : fait passer le temps de la sortie 1, 2, 4, 8 ou 16 fois plus vite (les alertes restent réelles)
+void sortieAccelerer(int x);

@@ -544,6 +544,7 @@ struct EtatSortie {
   bool pesee = false;
   float poidsAvant = 0;
   float part = PART_SANS_DUREE;  // part de la sueur à compenser, fixée au départ
+  float aBoirePrevu = 0;         // L/h de la prévision, pour estimer le 1er rappel pendant l'échauffement
   int objectifInitial = 0;
   std::vector<Bidon> bidons;
 
@@ -587,6 +588,7 @@ struct EtatSortie {
 
 static EtatSortie s;
 static bool simulationRapide = false;  // « Simuler la course en entier » : ni écran, ni LED, ni vibreur
+static int acceleration = 1;           // démo : 1, 2, 4, 8 ou 16 secondes de sortie par seconde réelle
 static unsigned long dernierTick = 0;
 static unsigned long ledTestJusqua = 0;  // LED allumée par le bouton Tester
 
@@ -819,7 +821,8 @@ static bool alerteDue() {
 static int secondesAvantAlerte() {
   int depuis = s.duree - s.derniereAlerte;
   if (!(reglages["auto"] | true)) return max(0, (int)(reglages["intervalle"] | 12) * 60 - depuis);
-  float mlParS = s.aBoire * 1000 / 3600;
+  // Pendant l'échauffement, le débit du moment est trop bas pour estimer : on prend celui prévu
+  float mlParS = (s.duree < 600 ? max(s.aBoire, s.aBoirePrevu) : s.aBoire) * 1000 / 3600;
   float manque = max(0.0f, GORGEES_DECLENCHEMENT * gorgeeMl() - s.compteur);
   int t = mlParS > 0 ? (int)ceil(manque / mlParS) : INTERVALLE_MAX;
   t = max(t, INTERVALLE_MIN - depuis);
@@ -1023,6 +1026,8 @@ bool sortieDemarrer(JsonVariantConst recu) {
   s.poidsAvant = config["poids_avant"];
   s.part = p["calcul"]["part"];
   s.objectifInitial = p["objectif"];
+  s.aBoirePrevu = p["calcul"]["a_boire"];
+  acceleration = 1;
   s.decalageEchauffement = random(-180, 181);
   for (JsonVariantConst b : config["bidons"].as<JsonArrayConst>()) {
     s.bidons.push_back({b["volume"], b["type"].as<const char*>(), b["sucre"], b["sel"], b["sodium"], b["glucides"], 0});
@@ -1087,10 +1092,26 @@ bool sortieTerminer() {
   if (s.sport == "velo") apprendrePuissance();
   supprimerFichier(FICHIER_EN_COURS);
   Serial.printf("Fin : %.0f mL bus sur %d mL\n", s.buMl, objectifActuel());
+  acceleration = 1;
   s = EtatSortie{};
   ecrire(PIN_LED, false);
   afficherEtat();
   return true;
+}
+
+// Ajoute un point de calibration au profil : la sueur mesurée, ramenée à l'effort de référence,
+// avec le ressenti du jour (null si inconnu)
+static void ajouterPointPesee(const char* sport, float sueur, float rEffort, JsonVariantConst ressenti, bool fiable) {
+  JsonArray pesees = profil["pesees"].as<JsonArray>();
+  if (pesees.isNull()) pesees = profil["pesees"].to<JsonArray>();
+  while (pesees.size() >= MAX_PESEES) pesees.remove(0);
+  JsonObject p = pesees.add<JsonObject>();
+  p["f"] = famille(sport);
+  p["s"] = arrondi(sueur / max(0.2f, rEffort), 0.001);
+  if (ressenti.is<float>()) p["at"] = ressenti;
+  else p["at"] = nullptr;
+  p["fiable"] = fiable;
+  enregistrerProfil();
 }
 
 // Pesée de fin de sortie (questionnaire) : {"poids_apres":69.2, "reste":"vides|quart|moitie|pleins", "hors":false}
@@ -1119,20 +1140,53 @@ bool sortiePesee(JsonVariantConst recu, JsonObject resultat) {
     resultat["erreur"] = "valeur hors de la plage possible (0,1 à 3,5 L/h)";
     return true;
   }
-  // Ramenée à l'effort de référence, avec le ressenti du jour : un point de calibration
-  JsonArray pesees = profil["pesees"].as<JsonArray>();
-  if (pesees.isNull()) pesees = profil["pesees"].to<JsonArray>();
-  while (pesees.size() >= MAX_PESEES) pesees.remove(0);
-  JsonObject p = pesees.add<JsonObject>();
-  p["f"] = famille(dernierResume["sport"] | "course");
-  p["s"] = arrondi(sueur / max(0.2f, (float)(dernierResume["r_effort_moy"] | 1.0)), 0.001);
-  if (!dernierResume["ressenti"].isNull()) p["at"] = dernierResume["ressenti"];
-  else p["at"] = nullptr;
-  p["fiable"] = !hors;
-  enregistrerProfil();
+  ajouterPointPesee(dernierResume["sport"] | "course", sueur, dernierResume["r_effort_moy"] | 1.0,
+                    dernierResume["ressenti"], !hors);
   resultat["enregistree"] = true;
   dernierResume["pesee"] = false;  // une seule pesée par sortie
   return true;
+}
+
+// Pesée faite avant d'avoir le boîtier, saisie dans le profil :
+// {"sport", "seance", "duree" (min), "poids_avant", "poids_apres" (kg), "bu" (mL), "ressenti" (°C ou "nsp"),
+//  "fc_moy" (bpm), "puissance_moy" (W), "allure" (s/km), "hors" (bu ou uriné en dehors)} ; 0 = pas mesuré
+void peseeManuelle(JsonVariantConst recu, JsonObject resultat) {
+  JsonDocument doc;
+  JsonObject c = doc.to<JsonObject>();
+  normaliserConfig(recu, c);  // sport, séance et ressenti vérifiés comme pour une sortie
+  String sport = c["sport"].as<const char*>(), seance = c["seance"].as<const char*>();
+  float avant = recu["poids_avant"] | 0.0, apres = recu["poids_apres"] | 0.0;
+  float heures = constrain((float)(recu["duree"] | 0), 0.0f, 1440.0f) / 60;
+  float buL = constrain((float)(recu["bu"] | 0), 0.0f, 10000.0f) / 1000;
+  float fc = recu["fc_moy"] | 0.0, p = sport == "velo" ? (float)(recu["puissance_moy"] | 0.0) : 0;
+  int allure = sport == "course" ? constrain((int)(recu["allure"] | 0), 0, 1200) : 0;
+  bool hors = recu["hors"] | false;
+  resultat["sport"] = sport;
+  resultat["bu"] = round(buL * 1000);
+  if (heures < 0.5 || avant < 30 || avant > 200 || apres < 30 || apres > 200) {
+    resultat["erreur"] = "il faut une sortie d'au moins 30 min et des poids entre 30 et 200 kg";
+    return;
+  }
+  float sueur = (avant - apres + buL) / heures;  // 1 kg perdu = 1 L d'eau
+  resultat["sueur"] = arrondi(sueur, 0.01);
+  if (sueur < 0.1 || sueur > 3.5) {
+    resultat["erreur"] = "valeur hors de la plage possible (0,1 à 3,5 L/h)";
+    return;
+  }
+  // Effort moyen de la sortie : mêmes règles que pendant une sortie (calculerEffort)
+  float fcRepos = profil["fc_repos"] | 52, fcMax = profil["fc_max"] | 189;
+  float rFc = fc > 0 ? ((fc - fcRepos) / (fcMax - fcRepos)) / I_REF : 0, rP = p > 0 ? p / puissanceRef() : 0;
+  float rA = allure > 0 ? allureRef() / allure : 0, rE;
+  if (rP && rFc) rE = 0.6 * rP + 0.4 * rFc;
+  else if (rP) rE = rP;
+  else if (rA && rFc) rE = 0.5 * rFc + 0.5 * rA;
+  else if (rA) rE = rA;
+  else if (rFc) rE = rFc;
+  else rE = intensiteSeance(seance) / I_REF;
+  rE = constrain(rE, R_EFFORT_MIN, R_EFFORT_MAX);
+  resultat["r_effort"] = arrondi(rE, 0.01);
+  ajouterPointPesee(sport.c_str(), sueur, rE, c["ressenti"], !hors);
+  resultat["enregistree"] = true;
 }
 
 // ---------- Boucle ----------
@@ -1153,7 +1207,13 @@ void sortieTick() {
 
   // L'heure arrive du téléphone après le départ : on retrouve l'heure de départ
   if (!s.debut && heureConnue()) s.debut = time(nullptr) - s.duree;
-  avancerUneSeconde();
+  for (int i = 0; i < acceleration; i++) avancerUneSeconde();
+  // Fin de l'affichage de la consigne (en secondes réelles) : la LED s'éteint, l'écran s'éteint tout seul
+  if (s.alerte > 0 && --s.alerte == 0) ecrire(PIN_LED, false);
+}
+
+void sortieAccelerer(int x) {
+  acceleration = x >= 16 ? 16 : x >= 8 ? 8 : x >= 4 ? 4 : x >= 2 ? 2 : 1;
 }
 
 static void enregistrerPoint() {
@@ -1185,7 +1245,6 @@ static void avancerUneSeconde() {
   s.compteur += s.aBoire * 1000 / 3600;
 
   // Fin de l'affichage de la consigne : la LED s'éteint (l'écran s'éteint tout seul)
-  if (s.alerte > 0 && --s.alerte == 0) ecrire(PIN_LED, false);
   if (alerteDue()) {
     // En plein effort, on attend la récupération, mais jamais plus de 15 min
     bool attendre = attendreRecup() && (!s.attente || s.duree - s.debutAttente < (uint32_t)ATTENTE_RECUP_MAX);
@@ -1225,6 +1284,7 @@ void sortieEtat(JsonDocument& doc) {
   doc["rappels"] = s.nbRappels;
   doc["attente"] = s.attente;
   doc["pesee"] = s.pesee;  // le questionnaire de fin demandera le poids après
+  doc["acceleration"] = acceleration;
   Plan plan = planPour(s.aBoire * 1000 / 60);
   doc["plan"]["intervalle"] = plan.intervalle;
   doc["plan"]["gorgees"] = plan.gorgees;

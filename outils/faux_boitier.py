@@ -53,6 +53,7 @@ retours = []          # questionnaire de fin de sortie
 dernier_resume = {}   # résumé de la dernière sortie terminée, joint au retour
 commandes = {"led": 0, "vibreur": 0, "buzzer": 0}
 s = None
+acceleration = 1   # démo : secondes de sortie par seconde réelle (1, 2, 4, 8 ou 16)
 
 
 def borner(x, a, b):
@@ -338,7 +339,7 @@ def demarrer(c):
             "duree_prevue": p["duree_estimee"], "allure": c["allure"], "vitesse_prevue": c["vitesse"],
             "ressenti": c["ressenti"], "glucides": 0,
             "detail": lire_detail(c), "pesee": c["pesee"], "poids_avant": c["poids_avant"],
-            "part": p["calcul"]["part"], "objectif_initial": p["objectif"],
+            "part": p["calcul"]["part"], "objectif_initial": p["objectif"], "a_boire_prevu": p["calcul"]["a_boire"],
             "bidons": [dict(b, bu=0) for b in c["bidons"]],
             "bu": 0, "perdue": 0, "a_boire_cumul": 0, "km": 0, "sodium_perdu": 0, "sodium_apporte": 0,
             "fc_somme": 0, "p_somme": 0, "r_effort_somme": 0, "duree_cardio": 0, "duree_puissance": 0,
@@ -522,7 +523,8 @@ def secondes_avant_alerte():
     depuis = s["duree"] - s["derniere_alerte"]
     if not reglages["auto"]:
         return max(0, reglages["intervalle"] * 60 - depuis)
-    ml_par_s = s["a_boire"] * 1000 / 3600
+    # Pendant l'échauffement, on estime avec le débit prévu
+    ml_par_s = (max(s["a_boire"], s["a_boire_prevu"]) if s["duree"] < 600 else s["a_boire"]) * 1000 / 3600
     manque = max(0, GORGEES_DECLENCHEMENT * gorgee() - s["compteur"])
     t = math.ceil(manque / ml_par_s) if ml_par_s > 0 else INTERVALLE_MAX
     return max(0, min(max(t, INTERVALLE_MIN - depuis), INTERVALLE_MAX - depuis))
@@ -554,10 +556,6 @@ def tick(secondes=1):
         s["sodium_perdu"] += s["sueur"] / 3600 * sodium_sueur()
         s["a_boire_cumul"] += s["a_boire"] * 1000 / 3600
         s["compteur"] += s["a_boire"] * 1000 / 3600
-        if s["alerte"]:
-            s["alerte"]["restant"] -= 1
-            if s["alerte"]["restant"] <= 0:
-                s["alerte"] = None
         if alerte_due():
             attendre = attendre_recup() and (not s["attente"] or s["duree"] - s["debut_attente"] < ATTENTE_RECUP_MAX)
             if not attendre:
@@ -588,6 +586,56 @@ def etat_sortie():
         e["phase"] = {"nom": s["phase"], "repetition": s["repetition"],
                       "repetitions": s["detail"]["repetitions"] if s["detail"]["donne"] else 0}
     return e
+
+
+def seconde_reelle():
+    """Une seconde réelle : la sortie avance de `acceleration` secondes, l'affichage de l'alerte d'une."""
+    if not s or s["pause"]:
+        return
+    tick(acceleration)
+    if s and s["alerte"]:
+        s["alerte"]["restant"] -= 1
+        if s["alerte"]["restant"] <= 0:
+            s["alerte"] = None
+
+
+def ajouter_point_pesee(sport, sueur, r_effort, ressenti, fiable):
+    profil["pesees"] = profil["pesees"][-(MAX_PESEES - 1):] + [{
+        "f": famille(sport), "s": arrondi(sueur / max(0.2, r_effort), 0.001), "at": ressenti, "fiable": fiable}]
+
+
+def pesee_manuelle(recu):
+    """Même calcul que peseeManuelle() : une pesée faite avant d'avoir le boîtier."""
+    c = normaliser(recu)
+    lire = lambda k: float(recu.get(k) or 0)
+    avant, apres, heures, bu = lire("poids_avant"), lire("poids_apres"), borner(lire("duree"), 0, 1440) / 60, borner(lire("bu"), 0, 10000) / 1000
+    fc = lire("fc_moy")
+    p = lire("puissance_moy") if c["sport"] == "velo" else 0
+    allure = borner(entier(recu.get("allure")), 0, 1200) if c["sport"] == "course" else 0
+    r = {"sport": c["sport"], "bu": round(bu * 1000)}
+    if heures < 0.5 or not (30 <= avant <= 200 and 30 <= apres <= 200):
+        r["erreur"] = "il faut une sortie d'au moins 30 min et des poids entre 30 et 200 kg"
+        return r
+    sueur = (avant - apres + bu) / heures
+    r["sueur"] = arrondi(sueur, 0.01)
+    if not 0.1 <= sueur <= 3.5:
+        r["erreur"] = "valeur hors de la plage possible (0,1 à 3,5 L/h)"
+        return r
+    repos, fmax = profil["fc_repos"], profil["fc_max"]
+    r_fc = (fc - repos) / (fmax - repos) / I_REF if fc > 0 else 0
+    r_p = p / puissance_ref() if p > 0 else 0
+    r_a = allure_ref() / allure if allure > 0 else 0
+    if r_p and r_fc: re = 0.6 * r_p + 0.4 * r_fc
+    elif r_p: re = r_p
+    elif r_a and r_fc: re = 0.5 * r_fc + 0.5 * r_a
+    elif r_a: re = r_a
+    elif r_fc: re = r_fc
+    else: re = intensite_seance(c["seance"]) / I_REF
+    re = borner(re, R_EFFORT_MIN, R_EFFORT_MAX)
+    r["r_effort"] = arrondi(re, 0.01)
+    ajouter_point_pesee(c["sport"], sueur, re, c["ressenti"], not recu.get("hors"))
+    r["enregistree"] = True
+    return r
 
 
 def resume_complet():
@@ -665,9 +713,7 @@ def pesee(recu):
     if not 0.1 <= sueur <= 3.5:
         r["erreur"] = "valeur hors de la plage possible (0,1 à 3,5 L/h)"
         return r
-    profil["pesees"] = profil["pesees"][-(MAX_PESEES - 1):] + [{
-        "f": famille(dernier_resume["sport"]), "s": arrondi(sueur / max(0.2, dernier_resume["r_effort_moy"]), 0.001),
-        "at": dernier_resume.get("ressenti"), "fiable": not hors}]
+    ajouter_point_pesee(dernier_resume["sport"], sueur, dernier_resume["r_effort_moy"], dernier_resume.get("ressenti"), not hors)
     r["enregistree"] = True
     dernier_resume["pesee"] = False
     return r
@@ -701,15 +747,16 @@ class Gestion(BaseHTTPRequestHandler):
         if chemin == "/api/retours":
             return self.repondre(retours)
         if chemin == "/api/etat":
-            tick()
-            etat = {"active": bool(s), "pause": bool(s and s["pause"]), "batterie": 100, "commandes": commandes}
+            seconde_reelle()
+            etat = {"active": bool(s), "pause": bool(s and s["pause"]), "batterie": 100, "commandes": commandes,
+                    "acceleration": acceleration}
             if s:
                 etat.update(etat_sortie())
             return self.repondre(etat)
         self.send_error(404)
 
     def do_POST(self):
-        global s
+        global s, acceleration
         url = urlparse(self.path)
         params = parse_qs(url.query)
         longueur = int(self.headers.get("Content-Length") or 0)
@@ -723,6 +770,12 @@ class Gestion(BaseHTTPRequestHandler):
             if profil["sel"] not in ("oui", "non"):
                 profil["sel"] = "nsp"
             return self.config()
+        if chemin == "/api/pesee":
+            return self.repondre(pesee_manuelle(corps))
+        if chemin == "/api/sortie/vitesse":
+            x = entier(corps.get("x"), 1)
+            acceleration = 16 if x >= 16 else 8 if x >= 8 else 4 if x >= 4 else 2 if x >= 2 else 1
+            return self.repondre({"ok": True})
         if chemin == "/api/pesees/effacer":
             profil["pesees"] = []
             return self.config()
@@ -755,10 +808,12 @@ class Gestion(BaseHTTPRequestHandler):
             c = normaliser(corps)
             reglages["derniere_config"] = dict(c, pesee=False, poids_avant=0)
             s = demarrer(c)
+            acceleration = 1
         elif chemin == "/api/sortie/pause" and s:
             s["pause"] = not s["pause"]
         elif chemin == "/api/sortie/terminer" and s:
             terminer()
+            acceleration = 1
         elif chemin == "/api/historique/effacer":
             historique.clear()
         elif chemin == "/api/retour":
