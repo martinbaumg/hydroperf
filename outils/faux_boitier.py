@@ -30,7 +30,8 @@ PLAFOND, PLAFOND_PESEES = 0.8, 1.0
 INTERVALLE_MIN, INTERVALLE_MAX = 5 * 60, 20 * 60
 GORGEES_DECLENCHEMENT, GORGEES_MAX = 2, 3
 ATTENTE_RECUP_MAX = 15 * 60
-ALPHA_SODIUM, SODIUM_APRES_S = 0.5, 3600
+ALPHA_SODIUM, SODIUM_DEBUT_MG = 0.5, 500
+ATTENTE_RECUP_VELO = 5 * 60
 MAX_PESEES = 20
 
 CONFIG = {"sport": "velo", "seance": "endurance", "duree": 120, "distance": 50, "ressenti": None, "allure": 0,
@@ -82,16 +83,23 @@ def a_puissance(sport):
     return sport == "velo" and profil["capteur_puissance"]
 
 
-def a_vitesse(sport):
-    return sport == "course" and profil["capteur_gps"]
+def a_vitesse():
+    """Capteur de vitesse (montre GPS, capteur de roue ou téléphone), pour tous les sports."""
+    return profil["capteur_gps"]
 
 
 def allure_ref():
-    return profil["allure_ref"] if profil["allure_ref"] > 0 else 330
+    """Allure de référence du profil (s/km), 0 si inconnue."""
+    return profil["allure_ref"]
+
+
+def allure_habituelle():
+    """Pour estimer une durée ou simuler l'athlète : l'allure du profil, sinon 5:30."""
+    return allure_ref() or 330
 
 
 def vitesse_ref():
-    return 3600 / allure_ref()
+    return 3600 / allure_habituelle()
 
 
 def puissance_ref():
@@ -229,7 +237,8 @@ def normaliser(c):
                          "repetitions": borner(entier(d.get("repetitions"), 1), 1, 50),
                          "effort_s": borner(entier(d.get("effort_s")), 0, 3600),
                          "effort_m": borner(entier(d.get("effort_m")), 0, 20000),
-                         "allure_effort": borner(entier(d.get("allure_effort")), 0, 1200),
+                         "allure_effort": 0 if sport == "velo" else borner(entier(d.get("allure_effort")), 0, 1200),
+                         "vitesse_effort": round(borner(float(d.get("vitesse_effort") or 0), 0, 80), 1) if sport == "velo" else 0,
                          "recup_s": borner(entier(d.get("recup_s")), 0, 1800),
                          "retour_calme_min": borner(entier(d.get("retour_calme_min"), 10), 0, 90)}
     pesee = bool(c.get("pesee")) and float(c.get("poids_avant") or 0) >= 30
@@ -262,15 +271,22 @@ def km_effort(c):
     return c["distance"] + c["denivele"] / 100
 
 
+def vitesse_effort(o):
+    """km/h pendant les fractions : allure (course) ou vitesse (vélo) données, 0 sinon."""
+    return 3600 / o["allure_effort"] if o.get("allure_effort") else o.get("vitesse_effort", 0)
+
+
 def lire_detail(c):
-    d = {"echauffement": 900, "repetitions": 6, "effort": 180, "recup": 120, "calme": 600, "donne": False}
+    d = {"echauffement": 900, "repetitions": 6, "effort": 180, "recup": 120, "calme": 600, "donne": False,
+         "vitesse_effort": 0}
     o = c.get("detail")
     if not o:
         return d
     effort = o["effort_s"]
     if effort <= 0:
-        kmh = 3600 / o["allure_effort"] if o["allure_effort"] > 0 else vitesse_ref() * 0.85 / I_REF
+        kmh = vitesse_effort(o) or vitesse_ref() * 0.85 / I_REF
         effort = round(o["effort_m"] / 1000 / kmh * 3600)
+    d["vitesse_effort"] = vitesse_effort(o)
     d.update(echauffement=o["echauffement_min"] * 60, repetitions=o["repetitions"], effort=max(10, effort),
              recup=o["recup_s"], calme=o["retour_calme_min"] * 60, donne=True)
     return d
@@ -290,8 +306,12 @@ def duree_estimee(c):
     return 0
 
 
+def effort_par_allure(sport, allure):
+    return sport == "course" and allure > 0 and allure_ref() > 0
+
+
 def r_effort_declare(sport, seance, allure):
-    if sport == "course" and allure > 0:
+    if effort_par_allure(sport, allure):
         return borner(allure_ref() / allure, R_EFFORT_MIN, R_EFFORT_MAX)
     return intensite_seance(seance) / I_REF
 
@@ -328,7 +348,7 @@ def prevoir(c):
                        "r_meteo": arrondi(r_m, 0.01), "sueur": arrondi(sueur, 0.01), "part": arrondi(f, 0.01),
                        "a_boire": arrondi(a_boire, 0.01), "plafond": plafond(cal), "k": arrondi(cal["k"], 0.001),
                        "at_ref": cal["at_ref"],
-                       "effort": "allure" if c["sport"] == "course" and c["allure"] > 0 else "seance"}}
+                       "effort": "allure" if effort_par_allure(c["sport"], c["allure"]) else "seance"}}
 
 
 # ---------- Sortie en cours ----------
@@ -336,13 +356,13 @@ def prevoir(c):
 def demarrer(c):
     p = prevoir(c)
     return {"debut": int(time.time()), "duree": 0, "pause": False, "sport": c["sport"], "seance": c["seance"],
-            "duree_prevue": p["duree_estimee"], "allure": c["allure"], "vitesse_prevue": c["vitesse"],
+            "duree_prevue": p["duree_estimee"], "allure": c["allure"], "distance_prevue": c["distance"], "vitesse_prevue": c["vitesse"],
             "ressenti": c["ressenti"], "glucides": 0,
             "detail": lire_detail(c), "pesee": c["pesee"], "poids_avant": c["poids_avant"],
             "part": p["calcul"]["part"], "objectif_initial": p["objectif"], "a_boire_prevu": p["calcul"]["a_boire"],
             "bidons": [dict(b, bu=0) for b in c["bidons"]],
             "bu": 0, "perdue": 0, "a_boire_cumul": 0, "km": 0, "sodium_perdu": 0, "sodium_apporte": 0,
-            "fc_somme": 0, "p_somme": 0, "r_effort_somme": 0, "duree_cardio": 0, "duree_puissance": 0,
+            "fc_somme": 0, "p_somme": 0, "r_effort_somme": 0, "duree_cardio": 0, "duree_puissance": 0, "duree_vitesse": 0,
             "compteur": 0, "derniere_alerte": 0, "rappels": 0, "attente": False, "debut_attente": 0, "alerte": None,
             "fc": 0, "puissance": 0, "vitesse": 0, "r_effort": 1, "r_meteo": 1, "sueur": 0, "a_boire": 0,
             "source_effort": "seance", "decalage": random.randint(-180, 180), "fc_lisse": 0, "p_lisse": 0,
@@ -351,11 +371,18 @@ def demarrer(c):
 
 
 def objectif():
-    selon = arrondi(s["a_boire_cumul"], 10)
-    return max(s["objectif_initial"], selon) if s["duree_prevue"] else selon
+    """Déjà dû + reste de la sortie au débit du moment : s'ajuste pendant la sortie."""
+    reste = max(0, s["duree_prevue"] * 60 - s["duree"]) if s["duree_prevue"] else 0
+    debit = max(s["a_boire"], s["a_boire_prevu"]) if s["duree"] < 600 else s["a_boire"]
+    return arrondi(s["a_boire_cumul"] + reste * debit * 1000 / 3600, 10)
+
+
+en_effort_vrai = False
 
 
 def intensite_vraie(t):
+    global en_effort_vrai
+    en_effort_vrai = False
     if s["seance"] == "fractionne":
         d = s["detail"]
         t0 = max(60, d["echauffement"] + s["decalage"])
@@ -367,12 +394,13 @@ def intensite_vraie(t):
         if rep < d["repetitions"]:
             pos = dans % cycle
             if pos < d["effort"]:
+                en_effort_vrai = True
                 return 0.85
             return 0.45 if rep == d["repetitions"] - 1 else 0.40
         return 0.45
     cible = intensite_seance(s["seance"])
     if s["sport"] == "course" and s["allure"] > 0:
-        cible = borner(I_REF * allure_ref() / s["allure"], 0.3, 0.95)
+        cible = borner(I_REF * allure_habituelle() / s["allure"], 0.3, 0.95)
     return 0.3 + (cible - 0.3) * min(1, t / 600) + 0.04 * math.sin(t / 300)
 
 
@@ -403,21 +431,26 @@ def simuler_capteurs():
         v = (s["vitesse_prevue"] or 25) * (0.7 + 0.3 * iv / I_REF)
     elif s["sport"] == "trail":
         v = 7 * iv / I_REF
+    if en_effort_vrai and s["detail"]["vitesse_effort"]:
+        v = s["detail"]["vitesse_effort"] * bruit
     s["v_lisse"] = v if s["v_lisse"] == 0 else s["v_lisse"] + (v - s["v_lisse"]) / 30
-    s["vitesse"] = s["v_lisse"] if a_vitesse(s["sport"]) else 0
+    s["vitesse"] = s["v_lisse"] if a_vitesse() else 0
+    if s["vitesse"] > 0:
+        s["duree_vitesse"] += 1
     s["km"] += s["v_lisse"] / 3600
     # Signal rapide (moyenne sur environ 5 s) pour détecter les fractions
-    if not brut and a_vitesse(s["sport"]):
+    if not brut and a_vitesse():
         brut = v
     s["signal"] = 0 if not brut else (brut if not s["signal"] else s["signal"] + (brut - s["signal"]) / 5)
 
 
 def calculer_effort():
     repos, fmax = profil["fc_repos"], profil["fc_max"]
-    fc, p, v = s["fc"] > 0, s["puissance"] > 0, s["vitesse"] > 0
+    fc, p = s["fc"] > 0, s["puissance"] > 0
+    v = s["vitesse"] > 0 and s["sport"] == "course" and allure_ref() > 0
     r_fc = (s["fc"] - repos) / (fmax - repos) / I_REF if fc else 0
     r_p = s["puissance"] / puissance_ref() if p else 0
-    r_v = s["vitesse"] / vitesse_ref() if v else 0
+    r_v = s["vitesse"] / (3600 / allure_ref()) if v else 0
     if p and fc:
         r, src = 0.6 * r_p + 0.4 * r_fc, "puissance+cardio"
     elif p:
@@ -430,7 +463,7 @@ def calculer_effort():
         r, src = r_fc, "cardio"
     else:
         r = r_effort_declare(s["sport"], s["seance"], s["allure"])
-        src = "allure" if s["sport"] == "course" and s["allure"] > 0 else "seance"
+        src = "allure" if effort_par_allure(s["sport"], s["allure"]) else "seance"
     s["r_effort"], s["source_effort"] = borner(r, R_EFFORT_MIN, R_EFFORT_MAX), src
     if fc:
         s["fc_somme"] += s["fc"]
@@ -472,14 +505,18 @@ def suivre_phases():
     s["moy_phase"] += (signal - s["moy_phase"]) / s["nb_phase"]
 
 
+def attente_max_recup():
+    return ATTENTE_RECUP_VELO if s["sport"] == "velo" else ATTENTE_RECUP_MAX
+
+
 def attendre_recup():
     if s["phase"] != "effort":
         return False
-    return s["detail"]["effort"] - (s["duree"] - s["debut_phase"]) <= ATTENTE_RECUP_MAX
+    return s["detail"]["effort"] - (s["duree"] - s["debut_phase"]) <= attente_max_recup()
 
 
 def choisir_bidon(ml):
-    alpha = ALPHA_SODIUM if s["duree"] >= SODIUM_APRES_S else 0
+    alpha = ALPHA_SODIUM if s["sodium_perdu"] >= SODIUM_DEBUT_MG else 0
     choisi, meilleur = -1, 1e9
     for i, b in enumerate(s["bidons"]):
         reste = b["volume"] - b["bu"]
@@ -557,7 +594,7 @@ def tick(secondes=1):
         s["a_boire_cumul"] += s["a_boire"] * 1000 / 3600
         s["compteur"] += s["a_boire"] * 1000 / 3600
         if alerte_due():
-            attendre = attendre_recup() and (not s["attente"] or s["duree"] - s["debut_attente"] < ATTENTE_RECUP_MAX)
+            attendre = attendre_recup() and (not s["attente"] or s["duree"] - s["debut_attente"] < attente_max_recup())
             if not attendre:
                 declencher_alerte()
             elif not s["attente"]:
@@ -582,6 +619,9 @@ def etat_sortie():
                      "part": arrondi(s["part"], 0.01), "a_boire": arrondi(s["a_boire"], 0.01),
                      "plafond": plafond(cal), "compteur": round(s["compteur"])},
              bidons=[dict(b, bu=round(b["bu"])) for b in s["bidons"]])
+    e["mesures"] = {"fc": a_cardio(), "puissance": a_puissance(s["sport"]), "vitesse": a_vitesse()}
+    if s["seance"] == "fractionne":
+        e["detail"] = {k: s["detail"][k] for k in ("donne", "echauffement", "repetitions", "effort", "recup", "calme")}
     if s["phase"]:
         e["phase"] = {"nom": s["phase"], "repetition": s["repetition"],
                       "repetitions": s["detail"]["repetitions"] if s["detail"]["donne"] else 0}
@@ -601,7 +641,8 @@ def seconde_reelle():
 
 def ajouter_point_pesee(sport, sueur, r_effort, ressenti, fiable):
     profil["pesees"] = profil["pesees"][-(MAX_PESEES - 1):] + [{
-        "f": famille(sport), "s": arrondi(sueur / max(0.2, r_effort), 0.001), "at": ressenti, "fiable": fiable}]
+        "f": famille(sport), "s": arrondi(sueur / max(0.2, r_effort), 0.001), "at": ressenti, "fiable": fiable,
+        "sueur": arrondi(sueur, 0.01), "d": int(time.time())}]
 
 
 def pesee_manuelle(recu):
@@ -624,7 +665,7 @@ def pesee_manuelle(recu):
     repos, fmax = profil["fc_repos"], profil["fc_max"]
     r_fc = (fc - repos) / (fmax - repos) / I_REF if fc > 0 else 0
     r_p = p / puissance_ref() if p > 0 else 0
-    r_a = allure_ref() / allure if allure > 0 else 0
+    r_a = allure_ref() / allure if allure > 0 and allure_ref() > 0 else 0
     if r_p and r_fc: re = 0.6 * r_p + 0.4 * r_fc
     elif r_p: re = r_p
     elif r_a and r_fc: re = 0.5 * r_fc + 0.5 * r_a
@@ -644,7 +685,9 @@ def resume_complet():
     fc_moy = round(s["fc_somme"] / s["duree_cardio"]) if s["duree_cardio"] else 0
     p_moy = round(s["p_somme"] / s["duree_puissance"]) if s["duree_puissance"] else 0
     return {"sport": s["sport"], "seance": s["seance"], "duree": s["duree"], "km": round(s["km"], 1),
-            "ressenti": s["ressenti"], "poids": profil["poids"],
+            "ressenti": s["ressenti"], "poids": profil["poids"], "debut": s["debut"],
+            "allure_prevue": s["allure"], "distance_prevue": s.get("distance_prevue", 0),
+            "mesures": {"fc": s["duree_cardio"] > 0, "puissance": s["duree_puissance"] > 0, "vitesse": s["duree_vitesse"] > 0},
             "totaux": {"perdue": round(s["perdue"]), "bu": round(s["bu"]), "a_boire": round(s["a_boire_cumul"]),
                        "perte_poids": arrondi((s["perdue"] - s["bu"]) / 1000 / profil["poids"] * 100, 0.1),
                        "sodium_perdu": round(s["sodium_perdu"]), "sodium_apporte": round(s["sodium_apporte"]),
@@ -686,7 +729,7 @@ def terminer():
                            "sodium_perdu": round(s["sodium_perdu"]), "sodium_apporte": round(s["sodium_apporte"]),
                            "glucides": round(s["glucides"]), "fc_moy": fc_moy, "p_moy": p_moy, "r_effort_moy": r_moy, "part": s["part"],
                            "rappels": s["rappels"], "gorgees": s["gorgees"],
-                           "bidons": [dict(b, bu=round(b["bu"])) for b in s["bidons"]]})
+                           "bidons": [dict(b, bu=round(b["bu"])) for b in s["bidons"]], "resume": resume_complet()})
     if s["sport"] == "velo" and profil["ftp"] <= 0 and s["duree_puissance"] >= 1200 and profil["p_ref_n"] < 3:
         n = profil["p_ref_n"]
         profil["p_ref"] = round((profil["p_ref"] * n + p_moy) / (n + 1))
@@ -703,6 +746,8 @@ def pesee(recu):
     reste = recu.get("reste") if recu.get("reste") in ("vides", "quart", "moitie", "pleins") else "vides"
     fraction = {"quart": 0.25, "moitie": 0.5, "pleins": 1.0}.get(reste, 0)
     bu = dernier_resume["capacite"] / 1000 * (1 - fraction)
+    if isinstance(recu.get("bu"), (int, float)):
+        bu = borner(recu["bu"], 0, 10000) / 1000  # eau bue donnée en mL
     hors = bool(recu.get("hors"))
     r = {"poids_avant": avant, "poids_apres": apres, "bu": round(bu * 1000), "hors": hors}
     if heures < 0.5 or not 30 <= apres <= 200:
@@ -793,7 +838,7 @@ class Gestion(BaseHTTPRequestHandler):
             courses.append(dict(id=max([c["id"] for c in courses] + [0]) + 1, nom=corps.get("nom", "Ma séance"), **normaliser(corps)))
             return self.config()
         if chemin == "/api/courses/supprimer":
-            if len(courses) > 1:
+            if True:
                 courses[:] = [c for c in courses if c["id"] != int(params["id"][0])]
             return self.config()
         if chemin == "/api/commandes":

@@ -34,9 +34,10 @@ static const int INTERVALLE_MIN = 5 * 60;           // secondes minimum entre de
 static const int INTERVALLE_MAX = 20 * 60;          // rappel de sécurité
 static const int GORGEES_DECLENCHEMENT = 2;
 // GORGEES_MAX (3, les barres de l'écran) vient de ecran.h
-static const int ATTENTE_RECUP_MAX = 15 * 60;       // on attend la récup si elle arrive dans 15 min
+static const int ATTENTE_RECUP_MAX = 15 * 60;       // en course, on attend la récup si elle arrive dans 15 min
+static const int ATTENTE_RECUP_VELO = 5 * 60;       // à vélo on peut boire en roulant : 5 min au plus
 static const float ALPHA_SODIUM = 0.5;              // part du sodium perdu à compenser après 1 h
-static const uint32_t SODIUM_APRES_S = 3600;
+static const float SODIUM_DEBUT_MG = 500;           // électrolytes dès 500 mg de sodium perdus
 static const size_t MAX_PESEES = 20;
 
 static const uint32_t SAUVEGARDE_TOUTES_LES_S = 60;
@@ -78,15 +79,21 @@ static const char* famille(const String& sport) {
 
 static bool aCardio() { return profil["capteur_cardio"] | true; }
 static bool aPuissance(const String& sport) { return sport == "velo" && (profil["capteur_puissance"] | false); }
-// La vitesse GPS ne sert qu'en course : à vélo elle dépend du vent, en trail du dénivelé
-static bool aVitesse(const String& sport) { return sport == "course" && (profil["capteur_gps"] | false); }
+// Capteur de vitesse : montre GPS, capteur de roue ou téléphone (tous les sports). Pour l'effort,
+// la vitesse ne sert qu'en course : à vélo elle dépend du vent, en trail du dénivelé.
+static bool aVitesse() { return profil["capteur_gps"] | false; }
 
-// Allure habituelle de sortie longue (s/km), 5'30 par défaut
+// Allure de référence (sortie longue, s/km) donnée dans le profil, 0 si inconnue : sans elle,
+// une allure ou une vitesse ne dit rien de l'effort (5:30 n'est pas « tranquille » pour tout le monde)
 static float allureRef() {
-  int a = profil["allure_ref"] | 0;
+  return profil["allure_ref"] | 0;
+}
+// Allure habituelle pour estimer une durée ou simuler l'athlète : celle du profil, sinon 5:30
+static float allureHabituelle() {
+  float a = allureRef();
   return a > 0 ? a : 330;
 }
-static float vitesseRef() { return 3600 / allureRef(); }  // km/h
+static float vitesseRef() { return 3600 / allureHabituelle(); }  // km/h
 
 // Puissance de référence : 0,65 × FTP (milieu de la zone endurance de Coggan),
 // sinon la puissance moyenne des premières sorties, sinon 160 W
@@ -259,6 +266,7 @@ struct Detail {
   int effort = 180;            // s
   int recup = 120;             // s
   int calme = 10 * 60;         // s
+  float vitesseEffort = 0;     // km/h pendant les fractions (allure ou vitesse donnée), 0 = inconnue
   bool donne = false;          // détaillé par l'utilisateur
 };
 
@@ -295,7 +303,8 @@ void normaliserConfig(JsonVariantConst recu, JsonObject config) {
     o["repetitions"] = constrain((int)(d["repetitions"] | 1), 1, 50);
     o["effort_s"] = constrain((int)(d["effort_s"] | 0), 0, 3600);
     o["effort_m"] = constrain((int)(d["effort_m"] | 0), 0, 20000);
-    o["allure_effort"] = constrain((int)(d["allure_effort"] | 0), 0, 1200);
+    o["allure_effort"] = velo ? 0 : constrain((int)(d["allure_effort"] | 0), 0, 1200);
+    o["vitesse_effort"] = velo ? round(constrain((float)(d["vitesse_effort"] | 0.0f), 0.0f, 80.0f) * 10) / 10 : 0;
     o["recup_s"] = constrain((int)(d["recup_s"] | 0), 0, 1800);
     o["retour_calme_min"] = constrain((int)(d["retour_calme_min"] | 10), 0, 90);
   }
@@ -359,11 +368,12 @@ static Detail lireDetail(JsonVariantConst config) {
   d.repetitions = o["repetitions"] | 1;
   d.recup = o["recup_s"] | 0;
   d.calme = (o["retour_calme_min"] | 10) * 60;
+  int allure = o["allure_effort"] | 0;
+  d.vitesseEffort = allure > 0 ? 3600.0 / allure : (float)(o["vitesse_effort"] | 0.0);
   int s = o["effort_s"] | 0;
   if (s <= 0) {
-    // Effort donné en distance : durée avec l'allure de l'effort, sinon un peu plus vite que l'allure habituelle
-    int allure = o["allure_effort"] | 0;
-    float kmh = allure > 0 ? 3600.0 / allure : vitesseRef() * 0.85 / I_REF;
+    // Effort donné en distance : durée avec l'allure (ou la vitesse) de l'effort, sinon un peu plus vite que d'habitude
+    float kmh = d.vitesseEffort > 0 ? d.vitesseEffort : vitesseRef() * 0.85 / I_REF;
     s = round((float)(o["effort_m"] | 0) / 1000 / kmh * 3600);
   }
   d.effort = max(10, s);
@@ -384,9 +394,12 @@ static int dureeEstimee(JsonVariantConst config) {
   return 0;
 }
 
-// R_effort sans mesure : allure déclarée (course), sinon type de séance
+// R_effort sans mesure : allure déclarée (course, si l'allure de référence est connue), sinon type de séance
+static bool effortParAllure(const String& sport, int allure) {
+  return sport == "course" && allure > 0 && allureRef() > 0;
+}
 static float rEffortDeclare(const String& sport, const String& seance, int allure) {
-  if (sport == "course" && allure > 0) return constrain(allureRef() / allure, R_EFFORT_MIN, R_EFFORT_MAX);
+  if (effortParAllure(sport, allure)) return constrain(allureRef() / allure, R_EFFORT_MIN, R_EFFORT_MAX);
   return intensiteSeance(seance) / I_REF;
 }
 
@@ -447,7 +460,7 @@ void prevoir(JsonVariantConst config, JsonVariant p) {
   calcul["plafond"] = plafond(c);
   calcul["k"] = arrondi(c.k, 0.001);
   calcul["at_ref"] = c.atRef;
-  calcul["effort"] = sport == "course" && (config["allure"] | 0) > 0 ? "allure" : "seance";
+  calcul["effort"] = effortParAllure(sport, config["allure"] | 0) ? "allure" : "seance";
 }
 
 // ---------- Vibreur et buzzer : impulsions sans bloquer le serveur web ----------
@@ -551,7 +564,7 @@ struct EtatSortie {
   // Cumuls
   float buMl = 0, perdueMl = 0, aBoireMl = 0, km = 0, sodiumPerdu = 0, sodiumApporte = 0, glucidesApportes = 0;
   float fcSomme = 0, pSomme = 0, rEffortSomme = 0;
-  uint32_t dureeCardio = 0, dureePuissance = 0;
+  uint32_t dureeCardio = 0, dureePuissance = 0, dureeVitesse = 0;
 
   // Alertes
   float compteur = 0;          // mL « en retard »
@@ -596,17 +609,22 @@ static float restant(int i) {
   return max(0.0f, s.bidons[i].volume - s.bidons[i].bu);
 }
 
+// Ce qu'il faut boire sur toute la sortie : ce qui était déjà dû, plus le reste de la sortie au débit
+// du moment. Il s'ajuste donc pendant la sortie avec l'effort et la chaleur réels.
 static int objectifActuel() {
-  int selonEffort = arrondi(s.aBoireMl, 10);
-  return s.dureePrevue ? max(s.objectifInitial, selonEffort) : selonEffort;
+  float reste = s.dureePrevue ? max(0.0f, s.dureePrevue * 60.0f - s.duree) : 0;
+  float debit = s.duree < 600 ? max(s.aBoire, s.aBoirePrevu) : s.aBoire;  // L/h
+  return arrondi(s.aBoireMl + reste * debit * 1000 / 3600, 10);
 }
 
 // ---------- Simulation des capteurs ----------
 // L'athlète simulé suit sa séance avec une intensité « vraie » ; les capteurs qu'il a déclarés
 // (profil > Mon équipement) la mesurent, chacun à sa façon.
 
-// Intensité vraie (part de la réserve cardiaque) à l'instant t
+// Intensité vraie (part de la réserve cardiaque) à l'instant t ; enEffortVrai : en pleine fraction
+static bool enEffortVrai = false;
 static float intensiteVraie(uint32_t t) {
+  enEffortVrai = false;
   if (s.seance == "fractionne") {
     const Detail& d = s.detail;
     int t0 = max(60, d.echauffement + s.decalageEchauffement);
@@ -616,13 +634,14 @@ static float intensiteVraie(uint32_t t) {
     int rep = dans / cycle;
     if (rep < d.repetitions) {
       int pos = dans % cycle;
+      enEffortVrai = pos < d.effort;
       if (pos < d.effort || rep == d.repetitions - 1) return pos < d.effort ? 0.85 : 0.45;
       return 0.40;
     }
     return 0.45;  // retour au calme
   }
   float cible = intensiteSeance(s.seance);
-  if (s.sport == "course" && s.allure > 0) cible = constrain(I_REF * allureRef() / s.allure, 0.3f, 0.95f);
+  if (s.sport == "course" && s.allure > 0) cible = constrain(I_REF * allureHabituelle() / s.allure, 0.3f, 0.95f);
   float echauffement = min(1.0f, t / 600.0f);
   float relief = 0.04 * sin(t / 300.0);
   return 0.3 + (cible - 0.3) * echauffement + relief;
@@ -658,11 +677,13 @@ static void simulerCapteurs() {
   float v = vitesseRef() * iv / I_REF * bruit;
   if (s.sport == "velo") v = (s.vitessePrevue > 0 ? s.vitessePrevue : 25) * (0.7 + 0.3 * iv / I_REF);
   else if (s.sport == "trail") v = 7 * iv / I_REF;
+  if (enEffortVrai && s.detail.vitesseEffort > 0) v = s.detail.vitesseEffort * bruit;  // allure prévue des fractions
   s.vLisse = s.vLisse == 0 ? v : s.vLisse + (v - s.vLisse) / 30.0;
-  s.vitesse = aVitesse(s.sport) ? s.vLisse : 0;
+  s.vitesse = aVitesse() ? s.vLisse : 0;
+  if (s.vitesse > 0) s.dureeVitesse++;
   s.km += s.vLisse / 3600;
   // Signal rapide pour détecter les fractions : la moyenne sur 30 s réagirait trop lentement
-  if (brut == 0 && aVitesse(s.sport)) brut = v;
+  if (brut == 0 && aVitesse()) brut = v;
   s.signal = brut == 0 ? 0 : s.signal == 0 ? brut : s.signal + (brut - s.signal) / 5.0;
 }
 
@@ -670,10 +691,11 @@ static void simulerCapteurs() {
 
 static void calculerEffort() {
   float fcRepos = profil["fc_repos"] | 52, fcMax = profil["fc_max"] | 189;
-  bool fc = s.fc > 0, p = s.puissance > 0, v = s.vitesse > 0;
+  // La vitesse ne dit l'effort qu'en course, et seulement si l'allure de référence est connue
+  bool fc = s.fc > 0, p = s.puissance > 0, v = s.vitesse > 0 && s.sport == "course" && allureRef() > 0;
   float rFc = fc ? ((s.fc - fcRepos) / (fcMax - fcRepos)) / I_REF : 0;
   float rP = p ? s.puissance / puissanceRef() : 0;
-  float rV = v ? s.vitesse / vitesseRef() : 0;
+  float rV = v ? s.vitesse / (3600 / allureRef()) : 0;
   float r;
   if (p && fc) { r = 0.6 * rP + 0.4 * rFc; s.sourceEffort = "puissance+cardio"; }
   else if (p) { r = rP; s.sourceEffort = "puissance"; }
@@ -682,7 +704,7 @@ static void calculerEffort() {
   else if (fc) { r = rFc; s.sourceEffort = "cardio"; }
   else {
     r = rEffortDeclare(s.sport, s.seance, s.allure);
-    s.sourceEffort = s.sport == "course" && s.allure > 0 ? "allure" : "seance";
+    s.sourceEffort = effortParAllure(s.sport, s.allure) ? "allure" : "seance";
   }
   s.rEffort = constrain(r, R_EFFORT_MIN, R_EFFORT_MAX);
   if (fc) { s.fcSomme += s.fc; s.dureeCardio++; }
@@ -732,19 +754,24 @@ static void suivrePhases() {
   s.moyPhase += (signal - s.moyPhase) / s.nbPhase;
 }
 
-// En plein effort, et la récupération arrive dans moins de 15 min : on attend pour l'alerte
+// En plein effort, si la récupération arrive bientôt, on l'attend pour l'alerte :
+// 15 min au plus en course, 5 min à vélo (on peut boire en roulant)
+static int attenteMaxRecup() {
+  return s.sport == "velo" ? ATTENTE_RECUP_VELO : ATTENTE_RECUP_MAX;
+}
 static bool attendreRecup() {
   if (s.phase != EFFORT) return false;
   int resteEffort = s.detail.effort - (int)(s.duree - s.debutPhase);
-  return resteEffort <= ATTENTE_RECUP_MAX;
+  return resteEffort <= attenteMaxRecup();
 }
 
 // ---------- Alertes ----------
 
-// Bidon qui rapproche le plus « sodium apporté / sodium perdu » de α (0 la première heure, puis 0,5).
-// À égalité après une heure, on préfère un bidon sucré (énergie). -1 si tous les bidons sont vides.
+// Bidon qui rapproche le plus « sodium apporté / sodium perdu » de α : 0 au début, puis 0,5 dès 500 mg
+// de sodium perdus (plus tôt quand on transpire beaucoup ou que la sueur est salée).
+// À égalité, on préfère alors un bidon sucré (énergie). -1 si tous les bidons sont vides.
 static int choisirBidon(float ml) {
-  float alpha = s.duree >= SODIUM_APRES_S ? ALPHA_SODIUM : 0;
+  float alpha = s.sodiumPerdu >= SODIUM_DEBUT_MG ? ALPHA_SODIUM : 0;
   int choisi = -1;
   float meilleur = 1e9;
   for (size_t i = 0; i < s.bidons.size(); i++) {
@@ -1062,6 +1089,8 @@ static void apprendrePuissance() {
   enregistrerProfil();
 }
 
+static void resumeComplet(JsonObject r);
+
 bool sortieTerminer() {
   if (!s.active) return false;
   dernierResume.clear();
@@ -1087,6 +1116,7 @@ bool sortieTerminer() {
   if (reglages["consent_historique"] | true) {
     JsonDocument bilan;
     versJson(bilan, false);
+    resumeComplet(bilan["resume"].to<JsonObject>());  // pour revoir le résumé depuis le tableau de bord
     ajouterHistorique(bilan);
   }
   if (s.sport == "velo") apprendrePuissance();
@@ -1111,6 +1141,8 @@ static void ajouterPointPesee(const char* sport, float sueur, float rEffort, Jso
   if (ressenti.is<float>()) p["at"] = ressenti;
   else p["at"] = nullptr;
   p["fiable"] = fiable;
+  p["sueur"] = arrondi(sueur, 0.01);
+  p["d"] = heureConnue() ? (uint32_t)time(nullptr) : 0;
   enregistrerProfil();
 }
 
@@ -1123,6 +1155,7 @@ bool sortiePesee(JsonVariantConst recu, JsonObject resultat) {
   float fraction = strcmp(reste, "quart") == 0 ? 0.25 : strcmp(reste, "moitie") == 0 ? 0.5
                    : strcmp(reste, "pleins") == 0 ? 1.0 : 0.0;
   float buL = (dernierResume["capacite"] | 0) / 1000.0 * (1 - fraction);
+  if (recu["bu"].is<float>()) buL = constrain((float)recu["bu"], 0.0f, 10000.0f) / 1000;  // eau bue en mL
   bool hors = recu["hors"] | false;
   resultat["poids_avant"] = avant;
   resultat["poids_apres"] = apres;
@@ -1176,7 +1209,7 @@ void peseeManuelle(JsonVariantConst recu, JsonObject resultat) {
   // Effort moyen de la sortie : mêmes règles que pendant une sortie (calculerEffort)
   float fcRepos = profil["fc_repos"] | 52, fcMax = profil["fc_max"] | 189;
   float rFc = fc > 0 ? ((fc - fcRepos) / (fcMax - fcRepos)) / I_REF : 0, rP = p > 0 ? p / puissanceRef() : 0;
-  float rA = allure > 0 ? allureRef() / allure : 0, rE;
+  float rA = allure > 0 && allureRef() > 0 ? allureRef() / allure : 0, rE;
   if (rP && rFc) rE = 0.6 * rP + 0.4 * rFc;
   else if (rP) rE = rP;
   else if (rA && rFc) rE = 0.5 * rFc + 0.5 * rA;
@@ -1247,7 +1280,7 @@ static void avancerUneSeconde() {
   // Fin de l'affichage de la consigne : la LED s'éteint (l'écran s'éteint tout seul)
   if (alerteDue()) {
     // En plein effort, on attend la récupération, mais jamais plus de 15 min
-    bool attendre = attendreRecup() && (!s.attente || s.duree - s.debutAttente < (uint32_t)ATTENTE_RECUP_MAX);
+    bool attendre = attendreRecup() && (!s.attente || s.duree - s.debutAttente < (uint32_t)attenteMaxRecup());
     if (!attendre) declencherAlerte();
     else if (!s.attente) { s.attente = true; s.debutAttente = s.duree; }
   }
@@ -1285,6 +1318,18 @@ void sortieEtat(JsonDocument& doc) {
   doc["attente"] = s.attente;
   doc["pesee"] = s.pesee;  // le questionnaire de fin demandera le poids après
   doc["acceleration"] = acceleration;
+  doc["mesures"]["fc"] = aCardio();
+  doc["mesures"]["puissance"] = aPuissance(s.sport);
+  doc["mesures"]["vitesse"] = aVitesse();
+  if (s.seance == "fractionne") {
+    JsonObject d = doc["detail"].to<JsonObject>();
+    d["donne"] = s.detail.donne;
+    d["echauffement"] = s.detail.echauffement;
+    d["repetitions"] = s.detail.repetitions;
+    d["effort"] = s.detail.effort;
+    d["recup"] = s.detail.recup;
+    d["calme"] = s.detail.calme;
+  }
   Plan plan = planPour(s.aBoire * 1000 / 60);
   doc["plan"]["intervalle"] = plan.intervalle;
   doc["plan"]["gorgees"] = plan.gorgees;
@@ -1325,6 +1370,13 @@ static void resumeComplet(JsonObject r) {
   r["km"] = round(s.km * 10) / 10;
   if (s.ressentiConnu) r["ressenti"] = s.ressenti; else r["ressenti"] = nullptr;
   r["poids"] = poids;
+  r["debut"] = s.debut;
+  r["allure_prevue"] = s.allure;
+  r["distance_prevue"] = s.distancePrevue;
+  // Ce qui a vraiment été mesuré : sans capteur de vitesse, la distance et l'allure ne sont pas connues
+  r["mesures"]["fc"] = s.dureeCardio > 0;
+  r["mesures"]["puissance"] = s.dureePuissance > 0;
+  r["mesures"]["vitesse"] = s.dureeVitesse > 0;
   JsonObject t = r["totaux"].to<JsonObject>();
   t["perdue"] = round(s.perdueMl);
   t["bu"] = round(s.buMl);

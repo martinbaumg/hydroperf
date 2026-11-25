@@ -115,14 +115,32 @@ def test_fractionne_detecte_avec_le_gps():
 
 
 def test_choix_du_bidon():
-    """La première heure : eau ; ensuite, le bidon salé revient régulièrement."""
+    """De l'eau tant qu'on a perdu moins de 500 mg de sodium, puis le bidon salé revient régulièrement."""
     reinitialiser()
     s = sortie({"sport": "course", "seance": "longue", "duree": 150, "ressenti": 25,
                 "bidons": [{"volume": 750, "type": "eau"}, {"volume": 750, "type": "isotonique"}]}, 150 * 60)
-    premiere_heure = {g[2] for g in s["gorgees"] if g[0] < 3600}
-    ensuite = [g[2] for g in s["gorgees"] if g[0] >= 3600]
-    assert premiere_heure == {0}, premiere_heure
-    assert 1 in ensuite, ensuite
+    premieres = [g for g in s["gorgees"] if g[0] < 20 * 60]
+    assert premieres and {g[2] for g in premieres} == {0}, premieres
+    assert 1 in [g[2] for g in s["gorgees"]], s["gorgees"]
+
+
+def test_objectif_ajuste():
+    """L'objectif suit le débit réel : plus d'effort que prévu = objectif plus haut que la prévision."""
+    reinitialiser(capteur_cardio=False, allure_ref=330)
+    fb.s = fb.demarrer(fb.normaliser({"sport": "course", "seance": "longue", "duree": 60, "allure": 330,
+                                      "bidons": [{"volume": 500, "type": "eau"}]}))
+    initial = fb.objectif()
+    fb.s["allure"] = 270  # il court plus vite que prévu
+    fb.tick(1200)
+    assert fb.objectif() > initial, (fb.objectif(), initial)
+
+
+def test_allure_sans_reference():
+    """Sans allure de référence dans le profil, l'allure prévue ne sert pas à estimer l'effort."""
+    reinitialiser(allure_ref=0)
+    assert fb.r_effort_declare("course", "longue", 270) == 1.0
+    reinitialiser(allure_ref=330)
+    proche(fb.r_effort_declare("course", "longue", 300), 1.1)
 
 
 def test_pesee():

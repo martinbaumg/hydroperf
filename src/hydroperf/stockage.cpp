@@ -105,8 +105,8 @@ void stockageInit() {
   charger(FICHIER_PROFIL, profil, profilDefaut);
   charger(FICHIER_REGLAGES, reglages, reglagesDefaut);
 
-  // Séances enregistrées ; les anciennes (sans type de séance ni bidons) sont remplacées
-  bool ok = lireJson(FICHIER_COURSES, courses) && courses.is<JsonArray>() && courses.size() > 0;
+  // Séances enregistrées (la liste peut être vide) ; les anciennes (sans type de séance ni bidons) sont remplacées
+  bool ok = lireJson(FICHIER_COURSES, courses) && courses.is<JsonArray>();
   for (JsonVariantConst c : courses.as<JsonArrayConst>()) {
     if (!c["seance"].is<const char*>() || !c["bidons"].is<JsonArrayConst>()) ok = false;
   }
@@ -157,7 +157,6 @@ int ajouterCourse(const char* nom, JsonVariantConst config) {
 
 bool supprimerCourse(int id) {
   JsonArray liste = courses.as<JsonArray>();
-  if (liste.size() <= 1) return false;  // on garde toujours au moins une course
   for (size_t i = 0; i < liste.size(); i++) {
     if ((liste[i]["id"] | 0) == id) {
       liste.remove(i);
