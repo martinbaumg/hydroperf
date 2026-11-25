@@ -22,6 +22,9 @@ bool sortieTerminer();  // enregistre le bilan dans l'historique (si l'utilisate
 // Résumé de la dernière sortie terminée (durée, sport, bu, objectif...) ; false s'il n'y en a pas
 bool sortieResume(JsonObject resume);
 void testerAlerte();    // joue l'alerte avec les réglages actuels
+// Simule toute la sortie en cours jusqu'à sa durée prévue, la termine et renvoie le résumé avec
+// les courbes (une valeur par minute) et les alertes ; false s'il n'y a pas de sortie en cours
+bool sortieSimulerEnEntier(JsonObject resume);
 
 // État en direct envoyé à la page toutes les secondes
 void sortieEtat(JsonDocument& doc);

@@ -510,6 +510,20 @@ struct Gorgee {
   uint8_t bidon;
 };
 
+// Un point de courbe par minute (résumé de fin de sortie) : valeurs compactes pour tenir en mémoire
+struct Point {
+  uint32_t t;        // s
+  uint8_t fc;        // bpm, 0 = pas de montre
+  uint16_t v10;      // vitesse × 10 (km/h)
+  uint16_t p;        // W, 0 = pas de capteur
+  uint16_t sueur;    // mL/h
+  uint16_t perdue;   // mL cumulés
+  uint16_t aBoire;   // mL cumulés
+  uint16_t bu;       // mL cumulés
+  uint8_t phase;
+};
+static const size_t MAX_POINTS = 720;  // au-delà, on garde un point sur deux
+
 // Phases d'un fractionné, détectées avec la puissance (vélo) ou la vitesse (course)
 enum Phase : uint8_t { AUCUNE, ECHAUFFEMENT, EFFORT, RECUP, CALME };
 static const char* NOMS_PHASES[] = {"", "echauffement", "effort", "recup", "calme"};
@@ -567,9 +581,12 @@ struct EtatSortie {
   int conditionDepuis = 0;
 
   std::vector<Gorgee> gorgees;
+  std::vector<Point> points;
+  uint32_t pasPoints = 60;  // secondes entre deux points
 };
 
 static EtatSortie s;
+static bool simulationRapide = false;  // « Simuler la course en entier » : ni écran, ni LED, ni vibreur
 static unsigned long dernierTick = 0;
 static unsigned long ledTestJusqua = 0;  // LED allumée par le bouton Tester
 
@@ -778,9 +795,11 @@ static void declencherAlerte() {
     s.sodiumApporte += ml / 1000 * sodiumBoissonMgL(s.bidons[b]);
     s.glucidesApportes += ml / 1000 * glucidesBoissonGL(s.bidons[b]);
     if (s.gorgees.size() < 300) s.gorgees.push_back({s.duree, (uint16_t)ml, (uint8_t)b});
+    if (simulationRapide) return;
     ecranConsigne(nb * g, g, typeEcran(s.bidons[b]));
     Serial.printf("Alerte : %d gorgée(s) dans le bidon %d (%.0f mL)\n", nb, b + 1, ml);
   } else {
+    if (simulationRapide) return;
     ecranMessage("Bidons vides ! Pense à remplir");
     Serial.println("Alerte : tous les bidons sont vides");
   }
@@ -1118,6 +1137,8 @@ bool sortiePesee(JsonVariantConst recu, JsonObject resultat) {
 
 // ---------- Boucle ----------
 
+static void avancerUneSeconde();
+
 void sortieTick() {
   vibreur.mettreAJour();
   buzzer.mettreAJour();
@@ -1132,7 +1153,22 @@ void sortieTick() {
 
   // L'heure arrive du téléphone après le départ : on retrouve l'heure de départ
   if (!s.debut && heureConnue()) s.debut = time(nullptr) - s.duree;
+  avancerUneSeconde();
+}
 
+static void enregistrerPoint() {
+  if (s.points.size() >= MAX_POINTS) {
+    // Mémoire pleine (sortie très longue) : un point sur deux, et deux fois moins souvent
+    for (size_t i = 0; i < s.points.size() / 2; i++) s.points[i] = s.points[2 * i + 1];
+    s.points.resize(s.points.size() / 2);
+    s.pasPoints *= 2;
+  }
+  s.points.push_back({s.duree, (uint8_t)round(s.fc), (uint16_t)round(s.vLisse * 10), (uint16_t)round(s.puissance),
+                      (uint16_t)round(s.sueur * 1000), (uint16_t)min(65535.0f, round(s.perdueMl)),
+                      (uint16_t)min(65535.0f, round(s.aBoireMl)), (uint16_t)min(65535.0f, round(s.buMl)), (uint8_t)s.phase});
+}
+
+static void avancerUneSeconde() {
   s.duree++;
   simulerCapteurs();
   calculerEffort();
@@ -1156,7 +1192,8 @@ void sortieTick() {
     if (!attendre) declencherAlerte();
     else if (!s.attente) { s.attente = true; s.debutAttente = s.duree; }
   }
-  if (s.duree % SAUVEGARDE_TOUTES_LES_S == 0) sauvegarderEnCours();
+  if (s.duree % s.pasPoints == 0) enregistrerPoint();
+  if (!simulationRapide && s.duree % SAUVEGARDE_TOUTES_LES_S == 0) sauvegarderEnCours();
 }
 
 void sortieEtat(JsonDocument& doc) {
@@ -1217,6 +1254,66 @@ void sortieEtat(JsonDocument& doc) {
     doc["alerte"]["bidon"] = s.alerteBidon;
   }
   ecrireBidons(doc["bidons"].to<JsonArray>());
+}
+
+// Résumé avec les courbes (au plus 240 points envoyés) et les alertes, pour les graphiques de l'appli
+static void resumeComplet(JsonObject r) {
+  float poids = profil["poids"] | 70;
+  r["sport"] = s.sport;
+  r["seance"] = s.seance;
+  r["duree"] = s.duree;
+  r["km"] = round(s.km * 10) / 10;
+  if (s.ressentiConnu) r["ressenti"] = s.ressenti; else r["ressenti"] = nullptr;
+  r["poids"] = poids;
+  JsonObject t = r["totaux"].to<JsonObject>();
+  t["perdue"] = round(s.perdueMl);
+  t["bu"] = round(s.buMl);
+  t["a_boire"] = round(s.aBoireMl);
+  t["perte_poids"] = arrondi((s.perdueMl - s.buMl) / 1000 / poids * 100, 0.1);  // % du poids à la fin
+  t["sodium_perdu"] = round(s.sodiumPerdu);
+  t["sodium_apporte"] = round(s.sodiumApporte);
+  t["glucides"] = round(s.glucidesApportes);
+  t["rappels"] = s.nbRappels;
+  t["fc_moy"] = fcMoyenne();
+  t["p_moy"] = puissanceMoyenne();
+  t["vitesse_moy"] = s.duree ? arrondi(s.km / (s.duree / 3600.0), 0.1) : 0;
+  t["part"] = arrondi(s.part, 0.01);
+  JsonObject serie = r["serie"].to<JsonObject>();
+  JsonArray tt = serie["t"].to<JsonArray>(), fc = serie["fc"].to<JsonArray>(), v = serie["v"].to<JsonArray>(),
+            p = serie["p"].to<JsonArray>(), sueur = serie["sueur"].to<JsonArray>(), perdue = serie["perdue"].to<JsonArray>(),
+            aBoire = serie["a_boire"].to<JsonArray>(), bu = serie["bu"].to<JsonArray>(), phase = serie["phase"].to<JsonArray>();
+  size_t pas = s.points.size() / 240 + 1;
+  for (size_t i = 0; i < s.points.size(); i += pas) {
+    const Point& pt = s.points[i];
+    tt.add(pt.t); fc.add(pt.fc); v.add(pt.v10 / 10.0); p.add(pt.p); sueur.add(pt.sueur);
+    perdue.add(pt.perdue); aBoire.add(pt.aBoire); bu.add(pt.bu); phase.add(NOMS_PHASES[pt.phase]);
+  }
+  JsonArray liste = r["gorgees"].to<JsonArray>();
+  for (const Gorgee& g : s.gorgees) {
+    JsonArray item = liste.add<JsonArray>();
+    item.add(g.t);
+    item.add(g.ml);
+    item.add(g.bidon);
+  }
+  ecrireBidons(r["bidons"].to<JsonArray>());
+}
+
+// « Simuler la course en entier » : fait avancer la sortie jusqu'à sa durée prévue (1 h si elle
+// n'en a pas), sans écran ni vibreur, la termine et renvoie le résumé. false si aucune sortie.
+bool sortieSimulerEnEntier(JsonObject resume) {
+  if (!s.active) return false;
+  s.pause = false;
+  uint32_t fin = max((uint32_t)(s.dureePrevue > 0 ? s.dureePrevue * 60 : 3600), s.duree);
+  simulationRapide = true;
+  while (s.duree < fin) {
+    avancerUneSeconde();
+    if (s.duree % 600 == 0) yield();  // laisse respirer le Wi-Fi
+  }
+  simulationRapide = false;
+  s.alerte = 0;
+  resumeComplet(resume);
+  sortieTerminer();
+  return true;
 }
 
 bool sortieResume(JsonObject resume) {

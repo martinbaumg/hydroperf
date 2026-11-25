@@ -129,6 +129,19 @@ button.puce{min-height:40px}
 .barre-fond{height:16px;border-radius:8px;background:var(--bordure)}
 .barre{height:16px;border-radius:8px;background:#46b3e6;width:0}
 .tuiles{display:flex;gap:10px}
+/* Graphiques du résumé : 3 couleurs validées (clair et sombre, daltonisme), une seule échelle par graphique */
+:root{--serie-1:#eb6834;--serie-2:#2a78d6;--serie-3:#1baf7a}
+html[data-theme="sombre"]{--serie-1:#d95926;--serie-2:#3987e5;--serie-3:#199e70}
+@media (prefers-color-scheme:dark){html[data-theme="auto"]{--serie-1:#d95926;--serie-2:#3987e5;--serie-3:#199e70}}
+.grille3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.grille3 .tuile{padding:10px 6px}
+.graphique{position:relative;touch-action:pan-y}
+.graphique svg{display:block;width:100%;height:auto;overflow:visible}
+.infobulle{position:absolute;top:0;pointer-events:none;background:var(--carte);color:var(--texte);border:1px solid var(--bordure);border-radius:10px;padding:6px 8px;font-size:12px;font-weight:700;line-height:1.4;box-shadow:0 2px 8px var(--ombre);white-space:nowrap;z-index:2}
+.legende{display:flex;gap:6px 14px;flex-wrap:wrap;font-size:13px;font-weight:800;color:var(--texte2)}
+.legende span{display:inline-flex;align-items:center;gap:6px}
+.legende i{display:inline-block;width:16px;height:4px;border-radius:2px}
+.legende i.rond{width:10px;height:10px;border-radius:5px}
 .tuile{flex:1;background:var(--carte);border-radius:26px;padding:12px;display:flex;flex-direction:column;align-items:center;text-align:center}
 .grille2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .case{gap:0;cursor:pointer}
@@ -279,6 +292,50 @@ button:disabled{opacity:.5}
 <button class="bouton secondaire" data-action="pause">Pause</button>
 <button class="bouton bleu" data-action="terminer">Terminer</button>
 </div>
+<button class="bouton principal" data-action="simuler_tout">Simuler la course en entier</button>
+<div class="petit texte2 centre">Pour la démo : la fin de la sortie est simulée d'un coup, puis tu vois son résumé.</div>
+</div>
+<div data-vue="resume" hidden>
+<div class="entete"><div><h1>Ta sortie en chiffres</h1><div class="texte2" data-v="res_sous_titre"></div></div></div>
+<div class="carte primaire">
+<span class="sur-titre">Hydratation</span>
+<div class="tres-grand" data-v="res_bu">–</div>
+<div class="gras" data-v="res_bu_detail"></div>
+<div class="clair" data-v="res_poids"></div>
+</div>
+<div class="grille3" data-res-chiffres></div>
+<div class="carte">
+<div class="titre-carte">Eau perdue, à boire et bue</div>
+<div class="legende" data-legende="hydratation"></div>
+<div class="graphique" data-graphique="hydratation"></div>
+<div class="petit texte2">Les points sont les alertes : chacune fait monter ce que tu as bu. Touche le graphique pour lire les valeurs.</div>
+</div>
+<div class="carte">
+<div class="titre-carte">Tes alertes</div>
+<div class="texte2" data-v="res_alertes_resume"></div>
+<div class="graphique" data-graphique="alertes"></div>
+<div class="legende" data-legende="alertes"></div>
+<details class="pourquoi"><summary>Voir chaque alerte</summary><div class="puces" data-res-alertes></div></details>
+</div>
+<div class="carte">
+<div class="titre-carte" data-v="res_titre_rythme">Allure</div>
+<div class="graphique" data-graphique="rythme"></div>
+<div class="petit texte2" data-v="res_note_rythme"></div>
+</div>
+<div class="carte" data-si-res-puissance>
+<div class="titre-carte">Puissance (W)</div>
+<div class="graphique" data-graphique="puissance"></div>
+</div>
+<div class="carte" data-si-res-fc>
+<div class="titre-carte">Cœur (battements/min)</div>
+<div class="graphique" data-graphique="fc"></div>
+</div>
+<div class="carte">
+<div class="titre-carte">Transpiration (L/h)</div>
+<div class="graphique" data-graphique="sueur"></div>
+<div class="petit texte2">Elle suit l'effort et la chaleur ressentie.</div>
+</div>
+<button class="bouton bleu" data-action="fermer_resume">Préparer une nouvelle sortie</button>
 </div>
 </div>
 <nav aria-label="Navigation"><button><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11 L12 4 L20 11 V20 H4 Z"></path></svg>Accueil</button><button aria-current="page"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 C16 9 18 12 18 15 A6 6 0 0 1 6 15 C6 12 8 9 12 3 Z"></path></svg>Sortie</button><button><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7 H13 M17 7 H20 M4 17 H7 M11 17 H20"></path><circle cx="15" cy="7" r="2"></circle><circle cx="9" cy="17" r="2"></circle></svg>Test</button><button><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 12 A4 4 0 1 0 12 4 A4 4 0 0 0 12 12 M4 21 C4 16 8 14 12 14 C16 14 20 16 20 21"></path></svg>Profil</button><button><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7 H20 M4 12 H20 M4 17 H20"></path></svg>Réglages</button></nav>
@@ -883,7 +940,8 @@ let dureeEnCours = 0;
 
 function afficherLive() {
   const e = etat;
-  $('[data-vue="preparation"]').hidden = !!e.active;
+  $('[data-vue="preparation"]').hidden = !!e.active || !!resume;
+  $('[data-vue="resume"]').hidden = !!e.active || !resume;
   $('[data-vue="live"]').hidden = !e.active;
   if (!e.active) return;
 
@@ -961,6 +1019,211 @@ function prevenirTelephone() {
 document.addEventListener("click", () => {
   try { if (!audio) audio = new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); } catch (e) {}
 }, {once: true});
+
+// ================= Résumé de la sortie (démo : « Simuler la course en entier ») =================
+
+let resume = null;  // réponse de /api/sortie/simuler
+
+const echelle = (d0, d1, r0, r1) => v => r0 + (v - d0) / ((d1 - d0) || 1) * (r1 - r0);
+const heureMin = t => `${Math.floor(t / 3600)}:${deux(Math.floor(t / 60) % 60)}`;
+const svgNs = "http://www.w3.org/2000/svg";
+
+// 3 à 5 graduations « rondes » entre min et max (pasPossibles : pour l'allure, des minutes rondes)
+function graduations(min, max, pasPossibles) {
+  const brut = (max - min) / 4 || 1;
+  const p = Math.pow(10, Math.floor(Math.log10(brut)));
+  const pas = pasPossibles ? pasPossibles.find(k => (max - min) / k <= 5) || pasPossibles[pasPossibles.length - 1]
+    : [1, 2, 2.5, 5, 10].map(k => k * p).find(k => k >= brut);
+  const liste = [];
+  for (let v = Math.ceil(min / pas) * pas; v <= max + pas * 1e-6; v += pas) liste.push(Number(v.toFixed(6)));
+  return liste;
+}
+
+// Courbe(s) en fonction du temps, une seule échelle verticale. Options :
+//  t (s), series [{nom, couleur, valeurs, format}], inverser (allure : plus vite = plus haut), zero,
+//  bandes [[t0, t1]] (fractions), marqueurs [{t, v, texte}] (alertes)
+function tracer(el, o) {
+  el.innerHTML = "";
+  const L = Math.max(280, el.clientWidth || 320), H = 190;
+  const multi = o.series.length > 1;
+  const m = {g: 42, d: multi ? 70 : 12, h: 10, b: 24};
+  const tMax = o.t[o.t.length - 1] || 1;
+  const valeurs = o.series.flatMap(x => x.valeurs).filter(v => v != null && isFinite(v));
+  if (!valeurs.length) return;
+  let min = Math.min(...valeurs), max = Math.max(...valeurs);
+  const marge = (max - min) * 0.1 || Math.abs(max) * 0.1 || 1;
+  min = o.zero ? 0 : min - marge;
+  max += marge;
+  const x = echelle(0, tMax, m.g, L - m.d);
+  const y = o.inverser ? echelle(min, max, m.h, H - m.b) : echelle(min, max, H - m.b, m.h);
+  const fmt = o.series[0].format;
+  let svg = `<svg viewBox="0 0 ${L} ${H}" role="img" aria-label="${o.titre || ""}">`;
+  // Fractions détectées : bandes grises derrière les courbes
+  (o.bandes || []).forEach(([a, b]) => {
+    svg += `<rect x="${x(a)}" y="${m.h}" width="${Math.max(2, x(b) - x(a))}" height="${H - m.b - m.h}" fill="var(--chip)"/>`;
+  });
+  // Grille et graduations (discrètes)
+  graduations(min, max, o.pasPossibles).forEach(v => {
+    if (v < min || v > max) return;
+    svg += `<line x1="${m.g}" x2="${L - m.d}" y1="${y(v)}" y2="${y(v)}" stroke="var(--bordure)" stroke-width="1"/>`
+      + `<text x="${m.g - 6}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="var(--texte2)">${fmt(v)}</text>`;
+  });
+  const pasT = [300, 600, 900, 1800, 3600, 7200].find(p => tMax / p <= 6) || 7200;
+  for (let t = 0; t <= tMax; t += pasT) {
+    svg += `<text x="${x(t)}" y="${H - 6}" text-anchor="middle" font-size="11" fill="var(--texte2)">${heureMin(t)}</text>`;
+  }
+  // Courbes (2 px), coupées là où la valeur manque
+  o.series.forEach(serie => {
+    let d = "", leve = true;
+    serie.valeurs.forEach((v, i) => {
+      if (v == null || !isFinite(v)) { leve = true; return; }
+      d += `${leve ? "M" : "L"}${x(o.t[i]).toFixed(1)} ${y(v).toFixed(1)}`;
+      leve = false;
+    });
+    svg += `<path d="${d}" fill="none" stroke="${serie.couleur}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+  });
+  // Étiquettes au bout des courbes, écartées pour ne pas se chevaucher
+  if (multi) {
+    const bouts = o.series.map(serie => {
+      const i = serie.valeurs.length - 1;
+      return {texte: `${serie.nom} ${serie.format(serie.valeurs[i])}`, y: y(serie.valeurs[i])};
+    }).sort((a, b) => a.y - b.y);
+    bouts.forEach((b, i) => { if (i && b.y - bouts[i - 1].y < 14) b.y = bouts[i - 1].y + 14; });
+    bouts.forEach(b => {
+      svg += `<text x="${L - m.d + 6}" y="${b.y + 4}" font-size="11" font-weight="800" fill="var(--texte2)">${b.texte}</text>`;
+    });
+  }
+  // Alertes : points de 9 px entourés de la couleur du fond
+  (o.marqueurs || []).forEach(mq => {
+    svg += `<circle cx="${x(mq.t)}" cy="${y(mq.v)}" r="4.5" fill="${mq.couleur}" stroke="var(--carte)" stroke-width="2"/>`;
+  });
+  svg += `<line data-curseur x1="0" x2="0" y1="${m.h}" y2="${H - m.b}" stroke="var(--texte2)" stroke-width="1" visibility="hidden"/>`;
+  svg += `<rect data-zone x="${m.g}" y="0" width="${L - m.d - m.g}" height="${H}" fill="transparent"/></svg>`;
+  el.innerHTML = svg + `<div class="infobulle" hidden></div>`;
+
+  // Survol ou toucher : ligne verticale et infobulle avec les valeurs du moment
+  const curseur = $("[data-curseur]", el), bulle = $(".infobulle", el), zone = $("[data-zone]", el), dessin = $("svg", el);
+  const montrer = ev => {
+    const r = dessin.getBoundingClientRect();
+    const px = (ev.clientX - r.left) * L / r.width;
+    const t = Math.max(0, Math.min(tMax, (px - m.g) / (L - m.d - m.g) * tMax));
+    let i = 0;
+    o.t.forEach((tt, j) => { if (Math.abs(tt - t) < Math.abs(o.t[i] - t)) i = j; });
+    curseur.setAttribute("x1", x(o.t[i]));
+    curseur.setAttribute("x2", x(o.t[i]));
+    curseur.setAttribute("visibility", "visible");
+    const proche = (o.marqueurs || []).filter(mq => Math.abs(mq.t - o.t[i]) <= tMax / 60);
+    bulle.innerHTML = `<b>${heureMin(o.t[i])}</b>` + o.series.map(serie =>
+      `<br>${serie.nom ? serie.nom + " : " : ""}${serie.valeurs[i] == null ? "–" : serie.format(serie.valeurs[i])}`).join("")
+      + proche.map(mq => `<br>${mq.texte}`).join("");
+    bulle.hidden = false;
+    const xPix = x(o.t[i]) * r.width / L;
+    bulle.style.left = `${Math.min(Math.max(0, xPix + 10), r.width - bulle.offsetWidth)}px`;
+  };
+  const cacher = () => { curseur.setAttribute("visibility", "hidden"); bulle.hidden = true; };
+  zone.addEventListener("pointermove", montrer);
+  zone.addEventListener("pointerdown", montrer);
+  zone.addEventListener("pointerleave", cacher);
+}
+
+// Frise des alertes : un point par alerte, de la couleur de la boisson
+function tracerAlertes(el, r) {
+  const L = Math.max(280, el.clientWidth || 320), H = 46, g = 14, d = 14;
+  const x = echelle(0, r.duree || 1, g, L - d);
+  let svg = `<svg viewBox="0 0 ${L} ${H}" role="img" aria-label="Alertes pendant la sortie">`
+    + `<line x1="${g}" x2="${L - d}" y1="16" y2="16" stroke="var(--bordure)" stroke-width="2"/>`;
+  const pasT = [300, 600, 900, 1800, 3600, 7200].find(p => r.duree / p <= 6) || 7200;
+  for (let t = 0; t <= r.duree; t += pasT) {
+    svg += `<text x="${x(t)}" y="${H - 4}" text-anchor="middle" font-size="11" fill="var(--texte2)">${heureMin(t)}</text>`;
+  }
+  r.gorgees.forEach(([t, ml, b]) => {
+    const boisson = BOISSONS[r.bidons[b].type];
+    svg += `<circle cx="${x(t)}" cy="16" r="6" fill="${boisson.couleur}" stroke="var(--carte)" stroke-width="2">`
+      + `<title>${heureMin(t)} · ${volume(ml)} ${boisson.de}</title></circle>`;
+  });
+  el.innerHTML = svg + "</svg>";
+}
+
+function afficherResume() {
+  const r = resume;
+  if (!r) return;
+  afficherLive();
+  const g = config ? config.reglages.gorgee : 30;
+  const velo = r.sport === "velo", tot = r.totaux, se = r.serie;
+  texte("res_sous_titre", `${SPORTS[r.sport] || ""} · ${SEANCES[r.seance] || ""} · ${dureeMinutes(r.duree / 60)}`
+    + `${r.ressenti != null ? ` · ${temperature(r.ressenti)} ressentis` : ""}`);
+  texte("res_bu", `${volume(tot.bu)} bus`);
+  texte("res_bu_detail", `sur ${volume(tot.a_boire)} conseillés et ${volume(tot.perdue)} perdus en transpirant`);
+  texte("res_poids", `À l'arrivée, tu as perdu environ ${nombre(tot.perte_poids)} % de ton poids en eau (à ne pas dépasser : 2 %).`);
+
+  const allure = v => v > 2 ? 3600 / v : null;
+  const chiffres = [
+    [chrono(r.duree), "durée"], [distance(r.km), "distance"],
+    velo ? [`${nombre(tot.vitesse_moy)} km/h`, "vitesse moyenne"] : [`${ecrireAllure(Math.round(allure(tot.vitesse_moy) || 0))} /km`, "allure moyenne"],
+    tot.fc_moy ? [`${tot.fc_moy}`, "bpm en moyenne"] : null,
+    tot.p_moy ? [`${tot.p_moy} W`, "puissance moyenne"] : null,
+    [`${tot.rappels}`, "alertes"],
+    [nombre(tot.rappels ? tot.bu / tot.rappels / g : 0), "gorgées par alerte en moyenne"],
+    [`${tot.sodium_perdu} mg`, `sodium perdu (${tot.sodium_apporte} mg apportés)`],
+    [`${tot.glucides} g`, "glucides apportés"],
+  ].filter(Boolean);
+  $("[data-res-chiffres]").innerHTML = chiffres.map(([v, l]) =>
+    `<div class="tuile"><span class="moyen">${v}</span><span class="texte2 petit">${l}</span></div>`).join("");
+
+  // Hydratation : trois courbes cumulées (L) et un point par alerte
+  const L_ = ml => ml / 1000;
+  const litres = v => `${nombre(v)} L`;
+  const series = [
+    {nom: "Perdue", couleur: "var(--serie-1)", valeurs: se.perdue.map(L_), format: litres},
+    {nom: "À boire", couleur: "var(--serie-2)", valeurs: se.a_boire.map(L_), format: litres},
+    {nom: "Bue", couleur: "var(--serie-3)", valeurs: se.bu.map(L_), format: litres},
+  ];
+  $('[data-legende="hydratation"]').innerHTML = series.map(x => `<span><i style="background:${x.couleur}"></i>${x.nom}</span>`).join("");
+  let cumul = 0;
+  const marqueurs = r.gorgees.map(([t, ml, b]) => {
+    cumul += ml;
+    return {t, v: cumul / 1000, couleur: "var(--serie-3)", texte: `Alerte : ${pluriel(Math.round(ml / g), "gorgée")} ${BOISSONS[r.bidons[b].type].de}`};
+  });
+  tracer($('[data-graphique="hydratation"]'), {t: se.t, series, zero: true, marqueurs, titre: "Eau perdue, à boire et bue"});
+
+  // Alertes
+  const ecarts = r.gorgees.map(([t], i) => t - (i ? r.gorgees[i - 1][0] : 0));
+  texte("res_alertes_resume", r.gorgees.length
+    ? `${pluriel(r.gorgees.length, "alerte")}, une toutes les ${Math.round(ecarts.reduce((a, b) => a + b, 0) / ecarts.length / 60)} min en moyenne.`
+    : "Aucune alerte pendant cette sortie.");
+  tracerAlertes($('[data-graphique="alertes"]'), r);
+  const types = [...new Set(r.gorgees.map(([, , b]) => r.bidons[b].type))];
+  $('[data-legende="alertes"]').innerHTML = types.map(type => {
+    const ml = r.gorgees.filter(([, , b]) => r.bidons[b].type === type).reduce((a, [, m]) => a + m, 0);
+    return `<span><i class="rond" style="background:${BOISSONS[type].couleur}"></i>${BOISSONS[type].nom} : ${volume(ml)}</span>`;
+  }).join("");
+  $("[data-res-alertes]").innerHTML = r.gorgees.map(([t, ml, b]) =>
+    `<span class="puce">${heureMin(t)} · ${pluriel(Math.round(ml / g), "gorgée")} ${BOISSONS[r.bidons[b].type].de}</span>`).join("");
+
+  // Fractions détectées : périodes d'effort, en bandes grises
+  const bandes = [];
+  se.phase.forEach((ph, i) => {
+    if (ph !== "effort") return;
+    const fin = se.t[i], debut = i ? se.t[i - 1] : 0;
+    if (bandes.length && bandes[bandes.length - 1][1] === debut) bandes[bandes.length - 1][1] = fin;
+    else bandes.push([debut, fin]);
+  });
+  // Allure (course, trail) ou vitesse (vélo)
+  texte("res_titre_rythme", velo ? "Vitesse (km/h)" : "Allure (min/km)");
+  tracer($('[data-graphique="rythme"]'), velo
+    ? {t: se.t, series: [{nom: "", couleur: "var(--serie-2)", valeurs: se.v, format: v => nombre(v, 0)}], bandes}
+    : {t: se.t, series: [{nom: "", couleur: "var(--serie-2)", valeurs: se.v.map(allure), format: v => ecrireAllure(Math.round(v))}],
+       inverser: true, bandes, pasPossibles: [15, 30, 60, 120, 300]});
+  texte("res_note_rythme", (velo ? "" : "Plus la courbe est haute, plus tu vas vite. ")
+    + (bandes.length ? "Les zones grisées sont les fractions détectées." : ""));
+  // Puissance et cœur, s'il y avait les capteurs
+  $("[data-si-res-puissance]").hidden = !tot.p_moy;
+  if (tot.p_moy) tracer($('[data-graphique="puissance"]'), {t: se.t, series: [{nom: "", couleur: "var(--serie-2)", valeurs: se.p, format: v => Math.round(v)}], bandes});
+  $("[data-si-res-fc]").hidden = !tot.fc_moy;
+  if (tot.fc_moy) tracer($('[data-graphique="fc"]'), {t: se.t, series: [{nom: "", couleur: "var(--serie-2)", valeurs: se.fc.map(v => v || null), format: v => Math.round(v)}], bandes});
+  tracer($('[data-graphique="sueur"]'), {t: se.t, series: [{nom: "", couleur: "var(--serie-2)", valeurs: se.sueur.map(L_), format: v => nombre(v, 2)}], zero: true});
+}
+window.addEventListener("resize", () => { if (resume && !$('[data-vue="resume"]').hidden) afficherResume(); });
 
 // ================= Test, profil et réglages =================
 
@@ -1179,6 +1442,23 @@ const ACTIONS = {
     aller("accueil");
     const h = historique[historique.length - 1];
     if (!etat.active && !etat.horsLigne) ouvrirRetour(pesee, h && Math.abs(h.duree - duree) <= 5 ? h : null);
+  },
+  async simuler_tout() {
+    if (!confirm("Simuler la fin de la sortie d'un coup ? Elle sera terminée et tu verras son résumé.")) return;
+    try {
+      resume = await api("/api/sortie/simuler", {});
+    } catch (e) {
+      return horsLigne();
+    }
+    await rafraichir();
+    chargerHistorique().catch(() => {});
+    window.scrollTo(0, 0);
+    afficherResume();
+  },
+  fermer_resume() {
+    resume = null;
+    afficherLive();
+    window.scrollTo(0, 0);
   },
   passer_retour() {
     $("#retour").close();

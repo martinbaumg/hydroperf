@@ -156,6 +156,19 @@ def test_glucides():
     assert fb.glucides_boisson({"type": "electrolyte", "sucre": False, "glucides": -1}) == 0
 
 
+def test_simuler_en_entier():
+    """Démo : la sortie est simulée jusqu'au bout et le résumé contient les courbes et les alertes."""
+    reinitialiser(capteur_gps=True)
+    fb.s = fb.demarrer(fb.normaliser({"sport": "course", "seance": "longue", "duree": 90, "ressenti": 25,
+                                      "bidons": [{"volume": 750, "type": "eau"}]}))
+    fb.tick(600)
+    r = fb.simuler_en_entier()
+    assert fb.s is None and r["duree"] == 5400
+    assert len(r["serie"]["t"]) == 90 and r["serie"]["t"][-1] == 5400
+    assert r["totaux"]["rappels"] == len(r["gorgees"]) > 0
+    assert r["totaux"]["bu"] == r["serie"]["bu"][-1]
+
+
 if __name__ == "__main__":
     tests = [(nom, f) for nom, f in list(globals().items()) if nom.startswith("test_")]
     for nom, f in tests:

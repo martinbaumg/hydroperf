@@ -346,7 +346,7 @@ def demarrer(c):
             "fc": 0, "puissance": 0, "vitesse": 0, "r_effort": 1, "r_meteo": 1, "sueur": 0, "a_boire": 0,
             "source_effort": "seance", "decalage": random.randint(-180, 180), "fc_lisse": 0, "p_lisse": 0,
             "v_lisse": 0, "signal": 0, "phase": None, "repetition": 0, "debut_phase": 0, "moy_phase": 0, "nb_phase": 0,
-            "condition": 0, "gorgees": []}
+            "condition": 0, "gorgees": [], "points": [], "pas_points": 60}
 
 
 def objectif():
@@ -528,6 +528,16 @@ def secondes_avant_alerte():
     return max(0, min(max(t, INTERVALLE_MIN - depuis), INTERVALLE_MAX - depuis))
 
 
+def enregistrer_point():
+    """Un point de courbe par minute (comme enregistrerPoint() dans sortie.cpp)."""
+    if len(s["points"]) >= 720:
+        s["points"] = s["points"][1::2]
+        s["pas_points"] *= 2
+    s["points"].append({"t": s["duree"], "fc": round(s["fc"]), "v": round(s["v_lisse"], 1), "p": round(s["puissance"]),
+                        "sueur": round(s["sueur"] * 1000), "perdue": round(s["perdue"]), "a_boire": round(s["a_boire_cumul"]),
+                        "bu": round(s["bu"]), "phase": s["phase"] or ""})
+
+
 def tick(secondes=1):
     for _ in range(secondes):
         if not s or s["pause"]:
@@ -554,6 +564,8 @@ def tick(secondes=1):
                 declencher_alerte()
             elif not s["attente"]:
                 s["attente"], s["debut_attente"] = True, s["duree"]
+        if s["duree"] % s["pas_points"] == 0:
+            enregistrer_point()
 
 
 def etat_sortie():
@@ -576,6 +588,34 @@ def etat_sortie():
         e["phase"] = {"nom": s["phase"], "repetition": s["repetition"],
                       "repetitions": s["detail"]["repetitions"] if s["detail"]["donne"] else 0}
     return e
+
+
+def resume_complet():
+    """Résumé avec les courbes (au plus 240 points) et les alertes, comme resumeComplet() dans sortie.cpp."""
+    pts = s["points"][::len(s["points"]) // 240 + 1]
+    fc_moy = round(s["fc_somme"] / s["duree_cardio"]) if s["duree_cardio"] else 0
+    p_moy = round(s["p_somme"] / s["duree_puissance"]) if s["duree_puissance"] else 0
+    return {"sport": s["sport"], "seance": s["seance"], "duree": s["duree"], "km": round(s["km"], 1),
+            "ressenti": s["ressenti"], "poids": profil["poids"],
+            "totaux": {"perdue": round(s["perdue"]), "bu": round(s["bu"]), "a_boire": round(s["a_boire_cumul"]),
+                       "perte_poids": arrondi((s["perdue"] - s["bu"]) / 1000 / profil["poids"] * 100, 0.1),
+                       "sodium_perdu": round(s["sodium_perdu"]), "sodium_apporte": round(s["sodium_apporte"]),
+                       "glucides": round(s["glucides"]), "rappels": s["rappels"], "fc_moy": fc_moy, "p_moy": p_moy,
+                       "vitesse_moy": arrondi(s["km"] / (s["duree"] / 3600), 0.1) if s["duree"] else 0,
+                       "part": arrondi(s["part"], 0.01)},
+            "serie": {k: [pt[k] for pt in pts] for k in ("t", "fc", "v", "p", "sueur", "perdue", "a_boire", "bu", "phase")},
+            "gorgees": s["gorgees"], "bidons": [dict(b, bu=round(b["bu"])) for b in s["bidons"]]}
+
+
+def simuler_en_entier():
+    """Fait avancer la sortie jusqu'à sa durée prévue (1 h sinon), la termine et renvoie le résumé."""
+    s["pause"] = False
+    fin = max(s["duree_prevue"] * 60 if s["duree_prevue"] else 3600, s["duree"])
+    tick(fin - s["duree"])
+    s["alerte"] = None
+    r = resume_complet()
+    terminer()
+    return r
 
 
 def terminer():
@@ -706,6 +746,11 @@ class Gestion(BaseHTTPRequestHandler):
         if chemin == "/api/commandes":
             commandes.update({k: 1 if v else 0 for k, v in corps.items() if k in commandes})
             return self.repondre(commandes)
+        if chemin == "/api/sortie/simuler":
+            if not s:
+                self.send_error(409)
+                return
+            return self.repondre(simuler_en_entier())
         if chemin == "/api/sortie/demarrer" and not s:
             c = normaliser(corps)
             reglages["derniere_config"] = dict(c, pesee=False, poids_avant=0)

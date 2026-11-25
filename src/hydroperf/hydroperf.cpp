@@ -278,6 +278,15 @@ static void definirRoutes() {
   });
   server.on("/api/sortie/pause", HTTP_POST, []() { sortiePause(); envoyerOk(); });
   server.on("/api/sortie/terminer", HTTP_POST, []() { sortieTerminer(); envoyerOk(); });
+  // Démo : simule la fin de la sortie d'un coup et renvoie le résumé (courbes, alertes, totaux)
+  server.on("/api/sortie/simuler", HTTP_POST, []() {
+    JsonDocument doc;
+    if (!sortieSimulerEnEntier(doc.to<JsonObject>())) {
+      server.send(409, "application/json", "{\"erreur\":\"aucune sortie en cours\"}");
+      return;
+    }
+    envoyerJson(doc);
+  });
 
   // Boutons de test : {"led":1,"vibreur":0,"buzzer":0} (seules les clés présentes changent)
   server.on("/api/commandes", HTTP_POST, []() {
