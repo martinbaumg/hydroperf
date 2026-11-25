@@ -46,12 +46,15 @@ static const size_t MAX_BIDONS = 3;
 // ---------- Petits outils ----------
 
 // Renvoie la valeur reçue si elle fait partie de la liste, sinon la première de la liste
-static const char* choix(JsonVariantConst v, std::initializer_list<const char*> valeurs) {
-  const char* texte = v | "";
+static const char* choix(const char* texte, std::initializer_list<const char*> valeurs) {
   for (const char* c : valeurs) {
     if (strcmp(texte, c) == 0) return c;
   }
   return *valeurs.begin();
+}
+
+static const char* choix(JsonVariantConst v, std::initializer_list<const char*> valeurs) {
+  return choix(v | "", valeurs);
 }
 
 static bool heureConnue() {
@@ -95,10 +98,11 @@ static float puissanceRef() {
 }
 
 // Intensité moyenne d'une séance (part de la réserve cardiaque)
+//   course et trail : footing, longue, fractionne ; vélo : balade, endurance, tempo, fractionne
 static float intensiteSeance(const String& seance) {
-  if (seance == "footing") return 0.55;
-  if (seance == "fractionne") return 0.75;
-  return I_REF;
+  if (seance == "footing" || seance == "balade") return 0.55;
+  if (seance == "fractionne" || seance == "tempo") return 0.75;
+  return I_REF;  // sortie longue, endurance
 }
 
 // Sodium de la sueur (mg/L) selon la question « traces de sel » : moyenne ± 1 écart-type
@@ -215,6 +219,7 @@ struct Bidon {
   String type;     // eau, electrolyte, isotonique, maison
   bool sucre, sel;
   int sodium;      // mg/L donnés par l'utilisateur, -1 = je ne sais pas
+  int glucides;    // g/L donnés par l'utilisateur, -1 = je ne sais pas
   float bu;
 };
 
@@ -227,8 +232,15 @@ static float sodiumBoissonMgL(const Bidon& b) {
   return 0;
 }
 
+// Glucides (g/L) : isotonique 60 g/L (EFSA : 80 à 350 kcal/L), maison sucrée : recette de l'appli
+static float glucidesBoissonGL(const Bidon& b) {
+  if (b.glucides >= 0) return b.glucides;
+  if (b.type == "isotonique" || (b.type == "maison" && b.sucre)) return 60;
+  return 0;
+}
+
 static bool sucre(const Bidon& b) {
-  return b.type == "isotonique" || (b.type == "maison" && b.sucre);
+  return glucidesBoissonGL(b) > 0;
 }
 
 static TypeBoisson typeEcran(const Bidon& b) {
@@ -252,14 +264,28 @@ struct Detail {
 
 void normaliserConfig(JsonVariantConst recu, JsonObject config) {
   config["sport"] = choix(recu["sport"], {"course", "trail", "velo"});
-  config["seance"] = choix(recu["seance"], {"footing", "longue", "fractionne"});
+  // Séances selon le sport ; une séance de l'autre liste est convertie (footing <-> balade, longue <-> endurance)
+  const char* seance = recu["seance"] | "";
+  bool velo = strcmp(config["sport"], "velo") == 0;
+  if (velo) {
+    if (strcmp(seance, "footing") == 0) seance = "balade";
+    else if (strcmp(seance, "longue") == 0) seance = "endurance";
+    config["seance"] = choix(seance, {"endurance", "balade", "tempo", "fractionne"});
+  } else {
+    if (strcmp(seance, "balade") == 0) seance = "footing";
+    else if (strcmp(seance, "endurance") == 0 || strcmp(seance, "tempo") == 0) seance = "longue";
+    config["seance"] = choix(seance, {"footing", "longue", "fractionne"});
+  }
   config["duree"] = constrain((int)(recu["duree"] | 0), 0, 24 * 60);
   config["distance"] = round(constrain((float)(recu["distance"] | 0.0f), 0.0f, 500.0f) * 10) / 10;
   // Ressenti annoncé par la météo (°C) ; null = « je ne sais pas » (pas de correction météo)
   if (recu["ressenti"].is<float>()) config["ressenti"] = constrain((int)round((float)recu["ressenti"]), -20, 50);
   else config["ressenti"] = nullptr;
-  // Allure prévue en s/km (course et trail), 0 = pas d'allure
-  config["allure"] = strcmp(config["sport"], "velo") == 0 ? 0 : constrain((int)(recu["allure"] | 0), 0, 1200);
+  // Allure prévue en s/km (course et trail) ou vitesse moyenne prévue en km/h (vélo), 0 = pas donnée
+  config["allure"] = velo ? 0 : constrain((int)(recu["allure"] | 0), 0, 1200);
+  config["vitesse"] = velo ? round(constrain((float)(recu["vitesse"] | 0.0f), 0.0f, 60.0f) * 10) / 10 : 0;
+  // Dénivelé positif en m (trail)
+  config["denivele"] = strcmp(config["sport"], "trail") == 0 ? constrain((int)(recu["denivele"] | 0), 0, 10000) : 0;
 
   JsonVariantConst d = recu["detail"];
   if (strcmp(config["seance"], "fractionne") == 0 && d.is<JsonObjectConst>()
@@ -290,6 +316,7 @@ void normaliserConfig(JsonVariantConst recu, JsonObject config) {
     o["sucre"] = maison && (b["sucre"] | false);
     o["sel"] = maison && (b["sel"] | false);
     o["sodium"] = constrain((int)(b["sodium"] | -1), -1, 3000);
+    o["glucides"] = constrain((int)(b["glucides"] | -1), -1, 200);
   }
   if (bidons.size() == 0) {
     JsonObject o = bidons.add<JsonObject>();
@@ -298,14 +325,29 @@ void normaliserConfig(JsonVariantConst recu, JsonObject config) {
     o["sucre"] = false;
     o["sel"] = false;
     o["sodium"] = -1;
+    o["glucides"] = -1;
   }
 }
 
-static float vitesseKmh(const String& sport, const String& seance, int allure) {
-  if (sport != "velo" && allure > 0) return 3600.0 / allure;
-  float base = sport == "velo" ? 25 : sport == "trail" ? 7 : vitesseRef();
+// Vitesse prévue (km/h ; en trail : kilomètres-effort par heure). Celle donnée par l'utilisateur
+// (allure ou vitesse), sinon une vitesse habituelle selon le sport et la séance.
+static float vitesseKmh(JsonVariantConst config) {
+  String sport = config["sport"] | "course", seance = config["seance"] | "";
+  int allure = config["allure"] | 0;
+  float vitesse = config["vitesse"] | 0.0;
+  if (sport == "velo") {
+    if (vitesse > 0) return vitesse;
+    float facteur = seance == "balade" ? 0.8 : seance == "tempo" ? 1.12 : seance == "fractionne" ? 1.08 : 1.0;
+    return 25 * facteur;
+  }
+  if (allure > 0) return 3600.0 / allure;
   float facteur = seance == "footing" ? 0.9 : seance == "fractionne" ? 1.1 : 1.0;
-  return base * facteur;
+  return vitesseRef() * facteur * (sport == "trail" ? 0.85 : 1.0);
+}
+
+// Distance prévue ; en trail, en kilomètres-effort : 100 m de dénivelé positif comptent comme 1 km
+static float kmEffort(JsonVariantConst config) {
+  return (float)(config["distance"] | 0.0) + (float)(config["denivele"] | 0) / 100;
 }
 
 static Detail lireDetail(JsonVariantConst config) {
@@ -338,8 +380,7 @@ static int dureeEstimee(JsonVariantConst config) {
   if (config["detail"].is<JsonObjectConst>()) return round(dureeDetail(lireDetail(config)) / 60.0);
   int duree = config["duree"] | 0;
   if (duree > 0) return duree;
-  float km = config["distance"] | 0.0;
-  if (km > 0) return round(km / vitesseKmh(config["sport"] | "", config["seance"] | "", config["allure"] | 0) * 60);
+  if ((float)(config["distance"] | 0.0) > 0) return round(kmEffort(config) / vitesseKmh(config) * 60);
   return 0;
 }
 
@@ -482,6 +523,7 @@ struct EtatSortie {
   int dureePrevue = 0;  // minutes, 0 = on verra
   float distancePrevue = 0;
   int allure = 0;       // s/km prévue
+  float vitessePrevue = 0;  // km/h prévue (vélo)
   bool ressentiConnu = false;
   float ressenti = 0;   // °C annoncés
   Detail detail;
@@ -492,7 +534,7 @@ struct EtatSortie {
   std::vector<Bidon> bidons;
 
   // Cumuls
-  float buMl = 0, perdueMl = 0, aBoireMl = 0, km = 0, sodiumPerdu = 0, sodiumApporte = 0;
+  float buMl = 0, perdueMl = 0, aBoireMl = 0, km = 0, sodiumPerdu = 0, sodiumApporte = 0, glucidesApportes = 0;
   float fcSomme = 0, pSomme = 0, rEffortSomme = 0;
   uint32_t dureeCardio = 0, dureePuissance = 0;
 
@@ -595,7 +637,7 @@ static void simulerCapteurs() {
     s.puissance = 0;
   }
   float v = vitesseRef() * iv / I_REF * bruit;
-  if (s.sport == "velo") v = 25 * (0.7 + 0.3 * iv / I_REF);
+  if (s.sport == "velo") v = (s.vitessePrevue > 0 ? s.vitessePrevue : 25) * (0.7 + 0.3 * iv / I_REF);
   else if (s.sport == "trail") v = 7 * iv / I_REF;
   s.vLisse = s.vLisse == 0 ? v : s.vLisse + (v - s.vLisse) / 30.0;
   s.vitesse = aVitesse(s.sport) ? s.vLisse : 0;
@@ -734,6 +776,7 @@ static void declencherAlerte() {
     s.bidons[b].bu += ml;
     s.buMl += ml;
     s.sodiumApporte += ml / 1000 * sodiumBoissonMgL(s.bidons[b]);
+    s.glucidesApportes += ml / 1000 * glucidesBoissonGL(s.bidons[b]);
     if (s.gorgees.size() < 300) s.gorgees.push_back({s.duree, (uint16_t)ml, (uint8_t)b});
     ecranConsigne(nb * g, g, typeEcran(s.bidons[b]));
     Serial.printf("Alerte : %d gorgée(s) dans le bidon %d (%.0f mL)\n", nb, b + 1, ml);
@@ -784,6 +827,7 @@ static void ecrireBidons(JsonArray bidons) {
     o["sucre"] = b.sucre;
     o["sel"] = b.sel;
     o["sodium"] = b.sodium;
+    o["glucides"] = b.glucides;
     o["bu"] = round(b.bu);
   }
 }
@@ -816,6 +860,7 @@ static void versJson(JsonDocument& d, bool complet) {
   d["perdue"] = round(s.perdueMl);
   d["sodium_perdu"] = round(s.sodiumPerdu);
   d["sodium_apporte"] = round(s.sodiumApporte);
+  d["glucides"] = round(s.glucidesApportes);
   d["fc_moy"] = fcMoyenne();
   d["p_moy"] = puissanceMoyenne();
   d["r_effort_moy"] = arrondi(rEffortMoyen(), 0.01);
@@ -832,6 +877,7 @@ static void versJson(JsonDocument& d, bool complet) {
   if (!complet) return;
   // Ce qu'il faut en plus pour reprendre la sortie après une coupure
   d["allure"] = s.allure;
+  d["vitesse_prevue"] = s.vitessePrevue;
   JsonObject det = d["detail"].to<JsonObject>();
   det["donne"] = s.detail.donne;
   det["echauffement"] = s.detail.echauffement;
@@ -854,6 +900,7 @@ static void versJson(JsonDocument& d, bool complet) {
   d["a_boire_exact"] = s.aBoireMl;
   d["sodium_perdu_exact"] = s.sodiumPerdu;
   d["sodium_apporte_exact"] = s.sodiumApporte;
+  d["glucides_exact"] = s.glucidesApportes;
   JsonArray bidons = d["bidons"];
   for (size_t i = 0; i < s.bidons.size(); i++) bidons[i]["bu"] = s.bidons[i].bu;
 }
@@ -882,6 +929,7 @@ void sortieInit() {
   s.dureePrevue = d["duree_prevue"] | 0;
   s.distancePrevue = d["distance_prevue"] | 0.0;
   s.allure = d["allure"] | 0;
+  s.vitessePrevue = d["vitesse_prevue"] | 0.0;
   s.ressentiConnu = !d["ressenti"].isNull();
   s.ressenti = d["ressenti"] | 0.0;
   JsonObjectConst det = d["detail"];
@@ -901,6 +949,7 @@ void sortieInit() {
   s.aBoireMl = d["a_boire_exact"] | 0.0;
   s.sodiumPerdu = d["sodium_perdu_exact"] | 0.0;
   s.sodiumApporte = d["sodium_apporte_exact"] | 0.0;
+  s.glucidesApportes = d["glucides_exact"] | 0.0;
   s.compteur = d["compteur"] | 0.0;
   s.derniereAlerte = d["derniere_alerte"] | 0;
   s.fcSomme = d["fc_somme"] | 0.0;
@@ -912,7 +961,7 @@ void sortieInit() {
   s.nbRappels = d["rappels"] | 0;
   for (JsonVariantConst b : d["bidons"].as<JsonArrayConst>()) {
     s.bidons.push_back({b["volume"] | 500, b["type"] | "eau", b["sucre"] | false, b["sel"] | false,
-                        b["sodium"] | -1, b["bu"] | 0.0f});
+                        b["sodium"] | -1, b["glucides"] | -1, b["bu"] | 0.0f});
   }
   for (JsonArrayConst g : d["gorgees"].as<JsonArrayConst>()) {
     s.gorgees.push_back({g[0] | 0u, (uint16_t)(g[1] | 0), (uint8_t)(g[2] | 0)});
@@ -947,6 +996,7 @@ bool sortieDemarrer(JsonVariantConst recu) {
   s.dureePrevue = p["duree_estimee"];
   s.distancePrevue = config["distance"];
   s.allure = config["allure"] | 0;
+  s.vitessePrevue = config["vitesse"] | 0.0;
   s.ressentiConnu = !config["ressenti"].isNull();
   s.ressenti = config["ressenti"] | 0;
   s.detail = lireDetail(config);
@@ -956,7 +1006,7 @@ bool sortieDemarrer(JsonVariantConst recu) {
   s.objectifInitial = p["objectif"];
   s.decalageEchauffement = random(-180, 181);
   for (JsonVariantConst b : config["bidons"].as<JsonArrayConst>()) {
-    s.bidons.push_back({b["volume"], b["type"].as<const char*>(), b["sucre"], b["sel"], b["sodium"], 0});
+    s.bidons.push_back({b["volume"], b["type"].as<const char*>(), b["sucre"], b["sel"], b["sodium"], b["glucides"], 0});
   }
   dernierTick = millis();
   sauvegarderEnCours();
@@ -1127,6 +1177,7 @@ void sortieEtat(JsonDocument& doc) {
   doc["perdue"] = round(s.perdueMl);
   doc["sodium_perdu"] = round(s.sodiumPerdu);
   doc["sodium_apporte"] = round(s.sodiumApporte);
+  doc["glucides"] = round(s.glucidesApportes);
   // Capteurs (simulés) : null quand l'utilisateur n'a pas le capteur
   if (s.fc > 0) doc["fc"] = round(s.fc); else doc["fc"] = nullptr;
   if (s.puissance > 0) doc["puissance"] = round(s.puissance); else doc["puissance"] = nullptr;

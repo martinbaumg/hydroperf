@@ -9,9 +9,11 @@ void sortieInit();   // reprend une sortie interrompue par une coupure (en pause
 void sortieTick();   // à appeler à chaque tour de loop()
 
 // Vérifie et complète une configuration de sortie reçue de la page :
-// {sport, seance, duree (min, 0 = on verra), distance (km, 0 = on verra), ressenti (°C ou null), allure (s/km),
+// {sport, seance (course/trail : footing, longue, fractionne ; vélo : balade, endurance, tempo, fractionne),
+//  duree (min, 0 = on verra), distance (km, 0 = on verra), ressenti (°C ou null), allure (s/km), vitesse (km/h, vélo),
+//  denivele (m, trail),
 //  detail (fractionné : echauffement_min, repetitions, effort_s ou effort_m, allure_effort, recup_s, retour_calme_min),
-//  pesee, poids_avant, bidons: [{volume, type, sucre, sel, sodium (mg/L, -1 = je ne sais pas)}]}
+//  pesee, poids_avant, bidons: [{volume, type, sucre, sel, sodium (mg/L) et glucides (g/L), -1 = je ne sais pas}]}
 void normaliserConfig(JsonVariantConst recu, JsonObject config);
 
 bool sortieDemarrer(JsonVariantConst config);  // false si une sortie est déjà en cours

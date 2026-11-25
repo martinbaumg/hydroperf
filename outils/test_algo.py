@@ -136,6 +136,26 @@ def test_pesee():
     assert fb.pesee({"poids_apres": 69.6}) is None  # une seule pesée par sortie
 
 
+def test_seances_et_durees():
+    """Séances propres au vélo, durée avec la vitesse, l'allure ou le dénivelé."""
+    reinitialiser(allure_ref=330)
+    c = fb.normaliser({"sport": "velo", "seance": "longue", "distance": 60, "vitesse": 30})
+    assert c["seance"] == "endurance" and fb.duree_estimee(c) == 120
+    assert fb.normaliser({"sport": "course", "seance": "tempo"})["seance"] == "longue"
+    assert fb.duree_estimee(fb.normaliser({"sport": "course", "seance": "longue", "distance": 10, "allure": 300})) == 50
+    # Trail : 20 km et 1 000 m D+ = 30 km-effort ; à 6:00 par km-effort, 3 h
+    assert fb.duree_estimee(fb.normaliser({"sport": "trail", "seance": "longue", "distance": 20, "denivele": 1000,
+                                           "allure": 360})) == 180
+    # La durée donnée passe avant la distance
+    assert fb.duree_estimee(fb.normaliser({"sport": "course", "duree": 45, "distance": 10, "allure": 300})) == 45
+
+
+def test_glucides():
+    assert fb.glucides_boisson({"type": "isotonique", "sucre": False, "glucides": -1}) == 60
+    assert fb.glucides_boisson({"type": "isotonique", "sucre": False, "glucides": 80}) == 80
+    assert fb.glucides_boisson({"type": "electrolyte", "sucre": False, "glucides": -1}) == 0
+
+
 if __name__ == "__main__":
     tests = [(nom, f) for nom, f in list(globals().items()) if nom.startswith("test_")]
     for nom, f in tests:

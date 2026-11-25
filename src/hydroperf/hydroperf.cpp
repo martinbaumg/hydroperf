@@ -239,7 +239,7 @@ static void definirRoutes() {
 
   // Configuration de la séance : {"sport":"velo","seance":"longue","duree":120,"distance":50}
   server.on("/api/seance", HTTP_POST, []() {
-    enregistrerConfig({"sport", "seance", "duree", "distance", "ressenti", "allure", "detail"});
+    enregistrerConfig({"sport", "seance", "duree", "distance", "ressenti", "allure", "vitesse", "denivele", "detail"});
   });
   // Configuration des bidons : {"bidons":[{"volume":750,"type":"eau","sucre":false,"sel":false}, ...]}
   server.on("/api/bidons", HTTP_POST, []() { enregistrerConfig({"bidons"}); });

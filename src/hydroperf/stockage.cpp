@@ -21,13 +21,15 @@ static const char PROFIL_DEFAUT[] = R"({"poids":68,"taille":178,"fc_repos":52,"f
   "sel":"nsp","capteur_cardio":true,"capteur_puissance":false,"capteur_gps":false,"ftp":0,"allure_ref":0,
   "pesees_actives":false,"pesees":[],"p_ref":0,"p_ref_n":0})";
 
-// Configuration d'une sortie : sport (course, trail, velo), seance (footing, longue, fractionne),
-// duree en min et distance en km (0 = "on verra comment je me sens"), ressenti (°C, null = je ne sais pas),
-// allure (s/km), 1 à 3 bidons de type eau, electrolyte, isotonique ou maison (sucre / sel pour la
-// boisson maison, sodium en mg/L si l'utilisateur le connaît, -1 sinon). Voir normaliserConfig.
-#define CONFIG_DEFAUT R"({"sport":"velo","seance":"longue","duree":120,"distance":50,"ressenti":null,"allure":0,
-  "bidons":[{"volume":750,"type":"eau","sucre":false,"sel":false,"sodium":-1},
-  {"volume":500,"type":"electrolyte","sucre":false,"sel":false,"sodium":-1}]})"
+// Configuration d'une sortie : sport (course, trail, velo), seance (course et trail : footing, longue,
+// fractionne ; vélo : balade, endurance, tempo, fractionne), duree en min et distance en km
+// (0 = "on verra comment je me sens"), ressenti (°C, null = je ne sais pas), allure (s/km, course et trail),
+// vitesse (km/h, vélo), denivele (m, trail), 1 à 3 bidons de type eau, electrolyte, isotonique ou maison
+// (sucre / sel pour la boisson maison ; sodium en mg/L et glucides en g/L si l'utilisateur les connaît,
+// -1 sinon). Voir normaliserConfig.
+#define CONFIG_DEFAUT R"({"sport":"velo","seance":"endurance","duree":120,"distance":50,"ressenti":null,"allure":0,
+  "vitesse":0,"denivele":0,"bidons":[{"volume":750,"type":"eau","sucre":false,"sel":false,"sodium":-1,"glucides":-1},
+  {"volume":500,"type":"electrolyte","sucre":false,"sel":false,"sodium":-1,"glucides":-1}]})"
 
 static const char REGLAGES_DEFAUT[] = R"({
   "fixation":"poignet",
@@ -39,7 +41,7 @@ static const char REGLAGES_DEFAUT[] = R"({
   "derniere_config":)" CONFIG_DEFAUT "}";
 
 static const char COURSES_DEFAUT[] = R"([
-  {"id":1,"nom":"Vélo du dimanche","sport":"velo","seance":"longue","duree":120,"distance":50,"bidons":[
+  {"id":1,"nom":"Vélo du dimanche","sport":"velo","seance":"endurance","duree":120,"distance":50,"bidons":[
     {"volume":750,"type":"eau","sucre":false,"sel":false},
     {"volume":500,"type":"electrolyte","sucre":false,"sel":false}]},
   {"id":2,"nom":"Footing du midi","sport":"course","seance":"footing","duree":45,"distance":8,"bidons":[

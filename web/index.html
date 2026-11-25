@@ -64,6 +64,8 @@ h2{margin:6px 6px 0;font-size:17px;font-weight:900}
 .carte.primaire .lien{color:#fff}
 .petit-bouton{min-height:40px;border:0;border-radius:20px;padding:0 16px;background:var(--primaire);color:#fff;font-size:14px;font-weight:900}
 .rangee{display:flex;gap:10px;align-items:center}
+.rangee.bas{align-items:flex-end}
+.puce[aria-pressed="true"]{background:var(--accent);color:#17323f}
 .ligne{display:flex;justify-content:space-between;align-items:center;gap:12px;min-height:52px;border-bottom:2px dashed var(--bordure);font-size:15px}
 .liste-lignes{padding:2px 16px;gap:0}
 .liste-lignes .ligne:last-child{border-bottom:0}
@@ -191,7 +193,7 @@ button:disabled{opacity:.5}
 <div class="titre-carte">Sport</div>
 <div class="segment" role="group" aria-label="Sport" data-choix="sport"><button data-valeur="course" aria-pressed="false">Course à pied</button><button data-valeur="trail" aria-pressed="false">Trail</button><button data-valeur="velo" aria-pressed="false">Vélo</button></div>
 <div class="titre-carte">Type de séance</div>
-<div class="segment" role="group" aria-label="Type de séance" data-choix="seance"><button data-valeur="footing" aria-pressed="false">Footing</button><button data-valeur="longue" aria-pressed="false">Sortie longue</button><button data-valeur="fractionne" aria-pressed="false">Fractionné</button></div>
+<div class="segment" role="group" aria-label="Type de séance" data-choix="seance"></div>
 </div>
 <div class="carte" data-si-fractionne hidden>
 <div class="ligne" ><span>Détailler mon fractionné<br><span class="petit texte2">pour placer tes gorgées pendant les récupérations</span></span><button class="interrupteur" role="switch" aria-checked="false" aria-label="Détailler mon fractionné" data-switch="detail"><span></span></button></div>
@@ -210,12 +212,17 @@ button:disabled{opacity:.5}
 <label class="champ">Distance<span><input type="number" inputmode="decimal" min="0" max="500" step="0.5" data-champ="distance"> <span data-unite="distance">km</span></span></label>
 </div>
 <div class="gras" data-v="duree_detail" data-si-duree-detail hidden></div>
-<label class="champ" data-si-allure>Allure prévue (facultatif)<span><input type="text" inputmode="decimal" placeholder="5:30" data-champ="allure"> /km</span></label>
+<div class="champs">
+<label class="champ" data-si-allure>Allure prévue<span><input type="text" inputmode="decimal" data-champ="allure"> /km</span></label>
+<label class="champ" data-si-vitesse>Vitesse prévue<span><input type="number" inputmode="decimal" min="0" max="60" step="0.5" data-champ="vitesse"> km/h</span></label>
+<label class="champ" data-si-denivele>Dénivelé positif<span><input type="number" inputmode="numeric" min="0" max="10000" step="50" data-champ="denivele"> m</span></label>
+</div>
+<div class="petit texte2" data-si-planifie>Remplis ce que tu connais : avec deux valeurs sur trois, je calcule la dernière (en gris).</div>
 </div>
 <div class="carte">
 <div class="titre-carte">Météo de ta sortie</div>
 <div class="texte2">La température ressentie annoncée par ton appli météo</div>
-<div class="segment grille quatre" role="group" aria-label="Température ressentie" data-choix="ressenti"><button data-valeur="nsp" aria-pressed="false">Je ne sais pas</button><button data-valeur="10" aria-pressed="false">10 °C</button><button data-valeur="15" aria-pressed="false">15 °C</button><button data-valeur="20" aria-pressed="false">20 °C</button><button data-valeur="25" aria-pressed="false">25 °C</button><button data-valeur="30" aria-pressed="false">30 °C</button><button data-valeur="35" aria-pressed="false">35 °C</button></div>
+<div class="rangee bas"><label class="champ">Ressenti<span><input type="number" inputmode="numeric" min="-20" max="120" step="1" placeholder="ex. 24" data-champ="ressenti"> <span data-unite="temp">°C</span></span></label><button class="puce" data-ressenti-nsp aria-pressed="false">Je ne sais pas</button></div>
 </div>
 <div class="carte" data-si-pesees hidden>
 <div class="cases"><label><input type="checkbox" data-champ="pesee"> Je me pèse aujourd'hui</label></div>
@@ -266,6 +273,7 @@ button:disabled{opacity:.5}
 <div class="carte">
 <div class="titre-carte">Tes bidons</div>
 <div data-live-bidons class="bidons"></div>
+<div class="petit texte2" data-v="live_apports"></div>
 </div>
 <div class="rangee">
 <button class="bouton secondaire" data-action="pause">Pause</button>
@@ -475,7 +483,17 @@ const pluriel = (n, mot) => `${n} ${mot}${n > 1 ? "s" : ""}`;
 const deux = n => String(n).padStart(2, "0");
 
 const SPORTS = {course: "Course à pied", trail: "Trail", velo: "Vélo"};
-const SEANCES = {footing: "Footing", longue: "Sortie longue", fractionne: "Fractionné"};
+const SEANCES = {footing: "Footing", longue: "Sortie longue", fractionne: "Fractionné",
+  balade: "Balade", endurance: "Endurance", tempo: "Tempo"};
+// À vélo, pas de footing : balade, endurance (sortie longue), tempo (effort soutenu) et fractionné
+const SEANCES_PAR_SPORT = {course: ["footing", "longue", "fractionne"], trail: ["footing", "longue", "fractionne"],
+  velo: ["balade", "endurance", "tempo", "fractionne"]};
+function convertirSeance(sport, seance) {
+  const velo = sport === "velo";
+  const correspondance = velo ? {footing: "balade", longue: "endurance"} : {balade: "footing", endurance: "longue", tempo: "longue"};
+  const s = correspondance[seance] || seance;
+  return SEANCES_PAR_SPORT[sport].includes(s) ? s : SEANCES_PAR_SPORT[sport][velo ? 1 : 0];
+}
 const BOISSONS = {
   eau: {nom: "Eau", couleur: "#46b3e6", de: "d'eau"},
   electrolyte: {nom: "Électrolyte", couleur: "#ff8a65", de: "d'électrolytes"},
@@ -655,8 +673,8 @@ function afficherTableauDeBord() {
 // ================= Sortie : préparation =================
 
 function configParDefaut() {
-  return {sport: "course", seance: "footing", duree: 60, distance: 10, ressenti: null, allure: 0,
-    bidons: [{volume: 500, type: "eau", sucre: false, sel: false, sodium: -1}]};
+  return {sport: "course", seance: "footing", duree: 60, distance: 10, ressenti: null, allure: 0, vitesse: 0, denivele: 0,
+    bidons: [{volume: 500, type: "eau", sucre: false, sel: false, sodium: -1, glucides: -1}]};
 }
 
 function copier(c) {
@@ -669,7 +687,13 @@ function chargerPreparation(c) {
   if (prep.libre) { prep.duree = 60; prep.distance = 10; }
   if (prep.ressenti === undefined) prep.ressenti = null;
   prep.allure = prep.allure || 0;
-  prep.bidons.forEach(b => { if (b.sodium === undefined) b.sodium = -1; });
+  prep.vitesse = prep.vitesse || 0;
+  prep.denivele = prep.denivele || 0;
+  prep.seance = convertirSeance(prep.sport, prep.seance);
+  prep.bidons.forEach(b => {
+    if (b.sodium === undefined) b.sodium = -1;
+    if (b.glucides === undefined) b.glucides = -1;
+  });
   // Détail du fractionné, avec l'effort en m, s ou min pour le formulaire
   const d = prep.detail;
   prep.detailActif = !!(d && (d.effort_s || d.effort_m));
@@ -688,8 +712,37 @@ function chargerPreparation(c) {
   afficherPreparation();
 }
 
-function configEnvoyee() {
+// Vitesse donnée par l'utilisateur (km/h ; en trail, kilomètres-effort par heure), 0 sinon
+function vitesseDonnee() {
+  if (prep.sport === "velo") return prep.vitesse || 0;
+  return prep.allure ? 3600 / prep.allure : 0;
+}
+// En trail, 100 m de dénivelé positif comptent comme 1 km
+const kmEffort = km => km + (prep.sport === "trail" ? (prep.denivele || 0) / 100 : 0);
+
+// Allure (s/km) ou vitesse (km/h) déduite de la durée et de la distance, quand elle n'est pas donnée
+function rythmeCalcule() {
+  if (prep.libre || vitesseDonnee() || !prep.duree || !prep.distance) return 0;
+  if (prep.sport === "velo") return prep.distance / (prep.duree / 60);
+  const allure = Math.round(prep.duree * 60 / kmEffort(prep.distance));
+  return allure >= 120 && allure <= 1200 ? allure : 0;
+}
+
+// Valeurs calculées, affichées en gris dans les cases vides
+function afficherCalculs(dureeEstimee) {
+  if (!prep) return;
+  const vit = vitesseDonnee(), rythme = rythmeCalcule();
+  $('[data-champ="duree"]').placeholder = !prep.duree && prep.distance && dureeEstimee ? `≈ ${dureeEstimee}` : "";
+  const km = prep.duree && vit ? prep.duree / 60 * vit - (prep.sport === "trail" ? prep.denivele / 100 : 0) : 0;
+  $('[data-champ="distance"]').placeholder = !prep.distance && km > 0 ? `≈ ${nombre(versAffichageDistance(km))}` : "";
+  $('[data-champ="allure"]').placeholder = prep.sport !== "velo" && rythme ? `≈ ${ecrireAllure(rythme)}` : "ex. 5:30";
+  $('[data-champ="vitesse"]').placeholder = prep.sport === "velo" && rythme ? `≈ ${nombre(rythme)}` : "ex. 25";
+}
+
+// complet : avec l'allure ou la vitesse calculée (pour la prévision et le départ, pas pour l'enregistrement)
+function configEnvoyee(complet = true) {
   const c = copier(prep);
+  if (complet && rythmeCalcule()) c[prep.sport === "velo" ? "vitesse" : "allure"] = rythmeCalcule();
   if (c.libre) { c.duree = 0; c.distance = 0; }
   // « Je ne sais pas » : envoyé en texte, car une valeur null serait ignorée à l'enregistrement
   if (c.ressenti === null) c.ressenti = "nsp";
@@ -709,7 +762,8 @@ function configEnvoyee() {
 function afficherPreparation() {
   if (!prep) return;
   selectionner($('[data-choix="sport"]'), prep.sport);
-  selectionner($('[data-choix="seance"]'), prep.seance);
+  $('[data-choix="seance"]').innerHTML = SEANCES_PAR_SPORT[prep.sport].map(k =>
+    `<button data-valeur="${k}" aria-pressed="${k === prep.seance}">${SEANCES[k]}</button>`).join("");
   selectionner($('[data-choix="nb_bidons"]'), prep.bidons.length);
   const libre = $('[data-switch="libre"]');
   libre.setAttribute("aria-checked", String(prep.libre));
@@ -720,7 +774,7 @@ function afficherPreparation() {
   $("[data-si-detail]").hidden = !detail;
   // Avec le détail, la durée se calcule toute seule
   $("[data-ligne-libre]").hidden = detail;
-  $("[data-si-planifie]").hidden = prep.libre || detail;
+  $$("[data-si-planifie]").forEach(e => e.hidden = prep.libre || detail);
   $("[data-si-duree-detail]").hidden = !detail;
   if (detail) {
     $("[data-modeles]").innerHTML = MODELES.map((m, i) => velo && m.effort_unite === "m" ? ""
@@ -733,14 +787,22 @@ function afficherPreparation() {
     $("[data-si-allure-effort]").hidden = velo;
   }
   $("[data-si-allure]").hidden = velo;
+  $("[data-si-vitesse]").hidden = !velo;
+  $("[data-si-denivele]").hidden = prep.sport !== "trail";
   valeurChamp($('[data-champ="allure"]'), ecrireAllure(prep.allure));
-  selectionner($('[data-choix="ressenti"]'), prep.ressenti === null ? "nsp" : prep.ressenti);
+  valeurChamp($('[data-champ="vitesse"]'), prep.vitesse || "");
+  valeurChamp($('[data-champ="denivele"]'), prep.denivele || "");
+  // Ressenti : saisi à la main, ou « Je ne sais pas » (pas de correction météo)
+  const enF = imperial();
+  valeurChamp($('[data-champ="ressenti"]'), prep.ressenti === null ? "" : enF ? Math.round(prep.ressenti * 9 / 5 + 32) : prep.ressenti);
+  $$('[data-unite="temp"]').forEach(e => e.textContent = enF ? "°F" : "°C");
+  $("[data-ressenti-nsp]").setAttribute("aria-pressed", String(prep.ressenti === null));
   $("[data-si-pesees]").hidden = !(config && config.profil.pesees_actives);
   $('[data-champ="pesee"]').checked = !!prep.pesee;
   $$("[data-si-pesee]").forEach(e => e.hidden = !prep.pesee);
   valeurChamp($('[data-champ="poids_avant"]'), prep.poids_avant || "");
-  $('[data-champ="duree"]').value = prep.duree || "";
-  $('[data-champ="distance"]').value = prep.distance ? versAffichageDistance(prep.distance) : "";
+  valeurChamp($('[data-champ="duree"]'), prep.duree || "");
+  valeurChamp($('[data-champ="distance"]'), prep.distance ? versAffichageDistance(prep.distance) : "");
   $$('[data-unite="distance"]').forEach(e => e.textContent = imperial() ? "mi" : "km");
 
   $("#tailles-bidon").innerHTML = TAILLES_BIDON.map(ml => `<option value="${versAffichageVolume(ml)}">`).join("");
@@ -751,8 +813,11 @@ function afficherPreparation() {
       + `<label><input type="checkbox" data-bidon="${i}" data-champ="sel"${b.sel ? " checked" : ""}> Salée</label></div>`
       + `<div class="petit texte2">Recette HydroPerf : 1 L d'eau, 1,5 g de sel (¼ de cuillère à café) et 60 g de sucre.</div>` : "";
     // Composition facultative, lue sur l'étiquette (sinon : valeurs de référence de l'EFSA et de l'AIS)
-    const compo = b.type === "eau" ? "" : b.sodium >= 0
-      ? `<label class="champ">Sodium (étiquette)<span><input type="number" inputmode="numeric" min="0" max="300" data-bidon="${i}" data-champ="sodium" value="${b.sodium / 10}"> mg / 100 mL</span></label>`
+    const connue = b.sodium >= 0 || b.glucides >= 0;
+    const compo = b.type === "eau" ? "" : connue
+      ? `<div class="petit texte2">Lis l'étiquette, pour 100 mL de boisson prête à boire :</div>`
+        + `<div class="champs"><label class="champ">Sodium<span><input type="number" inputmode="decimal" min="0" max="300" data-bidon="${i}" data-champ="sodium" value="${Math.max(0, b.sodium) / 10}"> mg</span></label>`
+        + `<label class="champ">Glucides<span><input type="number" inputmode="decimal" min="0" max="20" step="0.1" data-bidon="${i}" data-champ="glucides" value="${Math.max(0, b.glucides) / 10}"> g</span></label></div>`
         + `<button class="lien" data-compo="${i}">Je ne connais pas la composition</button>`
       : `<button class="lien" data-compo="${i}">Je connais la composition</button>`;
     return `<div class="bidon"><div class="bidon-titre"><span class="point" style="background:${BOISSONS[b.type].couleur}"></span>Bidon ${i + 1}</div>`
@@ -774,9 +839,9 @@ let minuteurSauvegarde = null;
 function sauvegarderPreparation() {
   clearTimeout(minuteurSauvegarde);
   minuteurSauvegarde = setTimeout(() => {
-    const c = configEnvoyee();
+    const c = configEnvoyee(false);
     api("/api/seance", {sport: c.sport, seance: c.seance, duree: c.duree, distance: c.distance,
-      ressenti: c.ressenti, allure: c.allure, detail: c.detail}).catch(() => {});
+      ressenti: c.ressenti, allure: c.allure, vitesse: c.vitesse, denivele: c.denivele, detail: c.detail}).catch(() => {});
     api("/api/bidons", {bidons: c.bidons}).catch(() => {});
   }, 800);
 }
@@ -801,6 +866,7 @@ function afficherPrevision(p) {
   texte("prev_detail", p.duree_estimee
     ? `Sur ${dureeMinutes(p.duree_estimee)}, tu perdras environ ${volume(p.perte)} d'eau et ${p.sodium} mg de sodium.`
     : `Tu transpires environ ${nombre(p.transpiration)} L par heure à cette allure.`);
+  afficherCalculs(p.duree_estimee);
   texte("prev_calcul", explication(p.calcul));
   texte("duree_detail", p.duree_estimee ? `Durée calculée avec ton fractionné : ${dureeMinutes(p.duree_estimee)}` : "");
   const alerte = $('[data-v="prev_alerte"]');
@@ -845,6 +911,7 @@ function afficherLive() {
   }
 
   texte("live_bu", volume(e.bu));
+  texte("live_apports", `Apportés par tes boissons : ${e.sodium_apporte} mg de sodium et ${e.glucides ?? 0} g de glucides.`);
   texte("live_plan", e.plan
     ? `Rythme actuel : ${pluriel(e.plan.gorgees, "gorgée")} toutes les ${e.plan.intervalle} min. On part du principe que tu bois à chaque consigne.`
     : "");
@@ -1195,11 +1262,11 @@ const ACTIONS = {
 
   exporter() {
     const colonnes = ["date", "sport", "seance", "duree_min", "ressenti_c", "km", "bu_ml", "objectif_ml", "a_boire_ml",
-      "perdue_ml", "sodium_perdu_mg", "sodium_apporte_mg", "fc_moy", "puissance_moy", "effort_moyen", "part_compensee", "alertes"];
+      "perdue_ml", "sodium_perdu_mg", "sodium_apporte_mg", "glucides_g", "fc_moy", "puissance_moy", "effort_moyen", "part_compensee", "alertes"];
     const lignes = historique.map(h => [
       h.debut ? new Date(h.debut * 1000).toLocaleString("fr-FR") : "",
       SPORTS[h.sport] || h.sport, SEANCES[h.seance] || h.seance, Math.round(h.duree / 60), h.ressenti, h.km, h.bu, h.objectif,
-      h.a_boire, h.perdue, h.sodium_perdu, h.sodium_apporte,
+      h.a_boire, h.perdue, h.sodium_perdu, h.sodium_apporte, h.glucides,
       h.fc_moy || "", h.p_moy || "", h.r_effort_moy, h.part, h.rappels,  // 0 : pas de capteur
     ].map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(";"));
     const csv = "﻿" + [colonnes.join(";"), ...lignes].join("\n");
@@ -1302,13 +1369,14 @@ document.addEventListener("click", ev => {
     const choix = el.closest("[data-choix]").dataset.choix;
     if (choix === "nb_bidons") {
       const nb = Number(el.dataset.valeur);
-      while (prep.bidons.length < nb) prep.bidons.push({volume: 500, type: "eau", sucre: false, sel: false, sodium: -1});
+      while (prep.bidons.length < nb) prep.bidons.push({volume: 500, type: "eau", sucre: false, sel: false, sodium: -1, glucides: -1});
       prep.bidons.length = nb;
     } else if (choix === "ressenti") {
       prep.ressenti = el.dataset.valeur === "nsp" ? null : Number(el.dataset.valeur);
       afficherAccueil();
     } else {
       prep[choix] = el.dataset.valeur;
+      if (choix === "sport") prep.seance = convertirSeance(prep.sport, prep.seance);
     }
     return afficherPreparation();
   }
@@ -1327,8 +1395,16 @@ document.addEventListener("click", ev => {
   }
   if ((el = t.closest("[data-compo]")) && prep) {
     const b = prep.bidons[Number(el.dataset.compo)];
-    // Valeur de départ : celle de référence du type de boisson
-    b.sodium = b.sodium >= 0 ? -1 : {isotonique: 600, electrolyte: 900}[b.type] ?? 600;
+    // Valeurs de départ : celles de référence du type de boisson (mg/L et g/L)
+    const connue = b.sodium >= 0 || b.glucides >= 0;
+    b.sodium = connue ? -1 : {isotonique: 600, electrolyte: 900}[b.type] ?? (b.sel ? 600 : 0);
+    b.glucides = connue ? -1 : b.type === "isotonique" || (b.type === "maison" && b.sucre) ? 60 : 0;
+    return afficherPreparation();
+  }
+  if ((el = t.closest("[data-ressenti-nsp]")) && prep) {
+    prep.ressenti = null;
+    $('[data-champ="ressenti"]').value = "";
+    afficherAccueil();
     return afficherPreparation();
   }
 
@@ -1369,7 +1445,16 @@ document.addEventListener("input", ev => {
   else if (el.dataset.champ === "distance") prep.distance = Math.max(0, depuisAffichageDistance(Number(el.value) || 0));
   else if (el.dataset.bidon !== undefined && el.dataset.champ === "volume") prep.bidons[el.dataset.bidon].volume = depuisAffichageVolume(Number(el.value) || 0);
   else if (el.dataset.bidon !== undefined && el.dataset.champ === "sodium") prep.bidons[el.dataset.bidon].sodium = Math.max(0, Math.round((Number(el.value) || 0) * 10));
+  else if (el.dataset.bidon !== undefined && el.dataset.champ === "glucides") prep.bidons[el.dataset.bidon].glucides = Math.max(0, Math.round((parseFloat(el.value.replace(",", ".")) || 0) * 10));
   else if (el.dataset.champ === "allure") prep.allure = lireAllure(el.value);
+  else if (el.dataset.champ === "vitesse") prep.vitesse = Math.max(0, parseFloat(el.value.replace(",", ".")) || 0);
+  else if (el.dataset.champ === "denivele") prep.denivele = Math.max(0, Math.round(Number(el.value) || 0));
+  else if (el.dataset.champ === "ressenti") {
+    const v = parseFloat(el.value.replace(",", "."));
+    prep.ressenti = isNaN(v) ? null : Math.round(imperial() ? (v - 32) * 5 / 9 : v);
+    $("[data-ressenti-nsp]").setAttribute("aria-pressed", String(prep.ressenti === null));
+    afficherAccueil();
+  }
   else if (el.dataset.champ === "poids_avant") prep.poids_avant = parseFloat(el.value.replace(",", ".")) || 0;
   else if (el.dataset.detail && el.dataset.detail !== "effort_unite") {
     const cle = el.dataset.detail;

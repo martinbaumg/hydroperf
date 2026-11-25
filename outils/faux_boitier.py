@@ -33,9 +33,10 @@ ATTENTE_RECUP_MAX = 15 * 60
 ALPHA_SODIUM, SODIUM_APRES_S = 0.5, 3600
 MAX_PESEES = 20
 
-CONFIG = {"sport": "velo", "seance": "longue", "duree": 120, "distance": 50, "ressenti": None, "allure": 0,
-          "bidons": [{"volume": 750, "type": "eau", "sucre": False, "sel": False, "sodium": -1},
-                     {"volume": 500, "type": "electrolyte", "sucre": False, "sel": False, "sodium": -1}]}
+CONFIG = {"sport": "velo", "seance": "endurance", "duree": 120, "distance": 50, "ressenti": None, "allure": 0,
+          "vitesse": 0, "denivele": 0,
+          "bidons": [{"volume": 750, "type": "eau", "sucre": False, "sel": False, "sodium": -1, "glucides": -1},
+                     {"volume": 500, "type": "electrolyte", "sucre": False, "sel": False, "sodium": -1, "glucides": -1}]}
 PROFIL = {"poids": 68, "taille": 178, "fc_repos": 52, "fc_max": 189, "sexe": "NC", "sel": "nsp",
           "capteur_cardio": True, "capteur_puissance": False, "capteur_gps": False, "ftp": 0, "allure_ref": 0,
           "pesees_actives": False, "pesees": [], "p_ref": 0, "p_ref_n": 0}
@@ -46,7 +47,7 @@ reglages = {"fixation": "poignet", "alerte_vibreur": True, "alerte_buzzer": Fals
             "theme": "auto", "notif_telephone": True, "derniere_config": copy.deepcopy(CONFIG)}
 courses = [dict(id=1, nom="Vélo du dimanche", **copy.deepcopy(CONFIG)),
            dict(id=2, nom="Footing du midi", sport="course", seance="footing", duree=45, distance=8,
-                bidons=[{"volume": 500, "type": "eau", "sucre": False, "sel": False, "sodium": -1}])]
+                bidons=[{"volume": 500, "type": "eau", "sucre": False, "sel": False, "sodium": -1, "glucides": -1}])]
 historique = []
 retours = []          # questionnaire de fin de sortie
 dernier_resume = {}   # résumé de la dernière sortie terminée, joint au retour
@@ -99,7 +100,7 @@ def puissance_ref():
 
 
 def intensite_seance(seance):
-    return {"footing": 0.55, "fractionne": 0.75}.get(seance, I_REF)
+    return {"footing": 0.55, "balade": 0.55, "fractionne": 0.75, "tempo": 0.75}.get(seance, I_REF)
 
 
 def sodium_sueur():
@@ -185,8 +186,14 @@ def sodium_boisson(b):
     return {"electrolyte": 900, "isotonique": 600}.get(b["type"], 600 if b["type"] == "maison" and b["sel"] else 0)
 
 
+def glucides_boisson(b):
+    if b.get("glucides", -1) >= 0:
+        return b["glucides"]
+    return 60 if b["type"] == "isotonique" or (b["type"] == "maison" and b["sucre"]) else 0
+
+
 def sucre(b):
-    return b["type"] == "isotonique" or (b["type"] == "maison" and b["sucre"])
+    return glucides_boisson(b) > 0
 
 
 # ---------- Configuration ----------
@@ -200,12 +207,21 @@ def entier(v, defaut=0):
 
 def normaliser(c):
     sport = c.get("sport") if c.get("sport") in ("course", "trail", "velo") else "course"
-    seance = c.get("seance") if c.get("seance") in ("footing", "longue", "fractionne") else "footing"
+    velo = sport == "velo"
+    seance = c.get("seance")
+    if velo:
+        seance = {"footing": "balade", "longue": "endurance"}.get(seance, seance)
+        seance = seance if seance in ("endurance", "balade", "tempo", "fractionne") else "endurance"
+    else:
+        seance = {"balade": "footing", "endurance": "longue", "tempo": "longue"}.get(seance, seance)
+        seance = seance if seance in ("footing", "longue", "fractionne") else "footing"
     r = c.get("ressenti")
     out = {"sport": sport, "seance": seance, "duree": borner(entier(c.get("duree")), 0, 1440),
            "distance": round(borner(float(c.get("distance") or 0), 0, 500), 1),
            "ressenti": borner(round(r), -20, 50) if isinstance(r, (int, float)) and not isinstance(r, bool) else None,
-           "allure": 0 if sport == "velo" else borner(entier(c.get("allure")), 0, 1200)}
+           "allure": 0 if velo else borner(entier(c.get("allure")), 0, 1200),
+           "vitesse": round(borner(float(c.get("vitesse") or 0), 0, 60), 1) if velo else 0,
+           "denivele": borner(entier(c.get("denivele")), 0, 10000) if sport == "trail" else 0}
     d = c.get("detail")
     if seance == "fractionne" and isinstance(d, dict) and (entier(d.get("effort_s")) > 0 or entier(d.get("effort_m")) > 0):
         out["detail"] = {"echauffement_min": borner(entier(d.get("echauffement_min"), 15), 0, 90),
@@ -223,16 +239,26 @@ def normaliser(c):
         t = b.get("type") if b.get("type") in ("eau", "electrolyte", "isotonique", "maison") else "eau"
         bidons.append({"volume": borner(entier(b.get("volume"), 500), 100, 2000), "type": t,
                        "sucre": t == "maison" and bool(b.get("sucre")), "sel": t == "maison" and bool(b.get("sel")),
-                       "sodium": borner(entier(b.get("sodium"), -1), -1, 3000)})
-    out["bidons"] = bidons or [{"volume": 500, "type": "eau", "sucre": False, "sel": False, "sodium": -1}]
+                       "sodium": borner(entier(b.get("sodium"), -1), -1, 3000),
+                       "glucides": borner(entier(b.get("glucides"), -1), -1, 200)})
+    out["bidons"] = bidons or [{"volume": 500, "type": "eau", "sucre": False, "sel": False, "sodium": -1, "glucides": -1}]
     return out
 
 
-def vitesse_kmh(sport, seance, allure):
-    if sport != "velo" and allure > 0:
-        return 3600 / allure
-    base = {"velo": 25, "trail": 7}.get(sport, vitesse_ref())
-    return base * {"footing": 0.9, "fractionne": 1.1}.get(seance, 1)
+def vitesse_kmh(c):
+    """Vitesse prévue en km/h (en trail : kilomètres-effort par heure)."""
+    if c["sport"] == "velo":
+        if c["vitesse"] > 0:
+            return c["vitesse"]
+        return 25 * {"balade": 0.8, "tempo": 1.12, "fractionne": 1.08}.get(c["seance"], 1)
+    if c["allure"] > 0:
+        return 3600 / c["allure"]
+    return vitesse_ref() * {"footing": 0.9, "fractionne": 1.1}.get(c["seance"], 1) * (0.85 if c["sport"] == "trail" else 1)
+
+
+def km_effort(c):
+    """En trail, 100 m de dénivelé positif comptent comme 1 km."""
+    return c["distance"] + c["denivele"] / 100
 
 
 def lire_detail(c):
@@ -259,7 +285,7 @@ def duree_estimee(c):
     if c["duree"]:
         return c["duree"]
     if c["distance"]:
-        return round(c["distance"] / vitesse_kmh(c["sport"], c["seance"], c["allure"]) * 60)
+        return round(km_effort(c) / vitesse_kmh(c) * 60)
     return 0
 
 
@@ -309,7 +335,8 @@ def prevoir(c):
 def demarrer(c):
     p = prevoir(c)
     return {"debut": int(time.time()), "duree": 0, "pause": False, "sport": c["sport"], "seance": c["seance"],
-            "duree_prevue": p["duree_estimee"], "allure": c["allure"], "ressenti": c["ressenti"],
+            "duree_prevue": p["duree_estimee"], "allure": c["allure"], "vitesse_prevue": c["vitesse"],
+            "ressenti": c["ressenti"], "glucides": 0,
             "detail": lire_detail(c), "pesee": c["pesee"], "poids_avant": c["poids_avant"],
             "part": p["calcul"]["part"], "objectif_initial": p["objectif"],
             "bidons": [dict(b, bu=0) for b in c["bidons"]],
@@ -372,7 +399,7 @@ def simuler_capteurs():
         brut = 0
     v = vitesse_ref() * iv / I_REF * bruit
     if s["sport"] == "velo":
-        v = 25 * (0.7 + 0.3 * iv / I_REF)
+        v = (s["vitesse_prevue"] or 25) * (0.7 + 0.3 * iv / I_REF)
     elif s["sport"] == "trail":
         v = 7 * iv / I_REF
     s["v_lisse"] = v if s["v_lisse"] == 0 else s["v_lisse"] + (v - s["v_lisse"]) / 30
@@ -478,6 +505,7 @@ def declencher_alerte():
         b["bu"] += ml
         s["bu"] += ml
         s["sodium_apporte"] += ml / 1000 * sodium_boisson(b)
+        s["glucides"] += ml / 1000 * glucides_boisson(b)
         s["gorgees"].append([s["duree"], round(ml), choix])
     s["alerte"] = {"restant": reglages["duree_ecran"], "gorgees": nb, "bidon": choix}
     s["rappels"] += 1
@@ -533,7 +561,7 @@ def etat_sortie():
     intervalle, gorgees = plan_pour(s["a_boire"] * 1000 / 60)
     e = {k: s[k] for k in ("sport", "seance", "duree", "duree_prevue", "ressenti", "rappels", "attente", "alerte", "pesee")}
     e.update(bu=round(s["bu"]), objectif=objectif(), perdue=round(s["perdue"]), sodium_perdu=round(s["sodium_perdu"]),
-             sodium_apporte=round(s["sodium_apporte"]), fc=round(s["fc"]) if s["fc"] > 0 else None,
+             sodium_apporte=round(s["sodium_apporte"]), glucides=round(s["glucides"]), fc=round(s["fc"]) if s["fc"] > 0 else None,
              puissance=round(s["puissance"]) if s["puissance"] > 0 else None,
              vitesse=arrondi(s["vitesse"], 0.1) if s["vitesse"] > 0 else None, transpi=arrondi(s["sueur"], 0.01),
              km=round(s["km"], 1), rappel=secondes_avant_alerte(), plan={"intervalle": intervalle, "gorgees": gorgees},
@@ -568,7 +596,7 @@ def terminer():
                            "ressenti": s["ressenti"], "km": round(s["km"], 1), "bu": round(s["bu"]),
                            "objectif": objectif(), "a_boire": round(s["a_boire_cumul"]), "perdue": round(s["perdue"]),
                            "sodium_perdu": round(s["sodium_perdu"]), "sodium_apporte": round(s["sodium_apporte"]),
-                           "fc_moy": fc_moy, "p_moy": p_moy, "r_effort_moy": r_moy, "part": s["part"],
+                           "glucides": round(s["glucides"]), "fc_moy": fc_moy, "p_moy": p_moy, "r_effort_moy": r_moy, "part": s["part"],
                            "rappels": s["rappels"], "gorgees": s["gorgees"],
                            "bidons": [dict(b, bu=round(b["bu"])) for b in s["bidons"]]})
     if s["sport"] == "velo" and profil["ftp"] <= 0 and s["duree_puissance"] >= 1200 and profil["p_ref_n"] < 3:
@@ -662,7 +690,7 @@ class Gestion(BaseHTTPRequestHandler):
             reglages.update({k: v for k, v in corps.items() if k in reglages})
             return self.config()
         if chemin in ("/api/seance", "/api/bidons"):
-            cles = ("sport", "seance", "duree", "distance", "ressenti", "allure", "detail") if chemin == "/api/seance" else ("bidons",)
+            cles = ("sport", "seance", "duree", "distance", "ressenti", "allure", "vitesse", "denivele", "detail") if chemin == "/api/seance" else ("bidons",)
             fusion = dict(reglages["derniere_config"], **{k: corps[k] for k in cles if k in corps})
             reglages["derniere_config"] = normaliser(fusion)
             return self.repondre(reglages["derniere_config"])
