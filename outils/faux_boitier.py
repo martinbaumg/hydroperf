@@ -30,7 +30,7 @@ PLAFOND, PLAFOND_PESEES = 0.8, 1.0
 INTERVALLE_MIN, INTERVALLE_MAX = 5 * 60, 20 * 60
 GORGEES_DECLENCHEMENT, GORGEES_MAX = 2, 3
 ATTENTE_RECUP_MAX = 15 * 60
-ALPHA_SODIUM, SODIUM_DEBUT_MG = 0.5, 500
+ALPHA_SODIUM = 0.5
 ATTENTE_RECUP_VELO = 5 * 60
 MAX_PESEES = 20
 
@@ -516,7 +516,7 @@ def attendre_recup():
 
 
 def choisir_bidon(ml):
-    alpha = ALPHA_SODIUM if s["sodium_perdu"] >= SODIUM_DEBUT_MG else 0
+    alpha = ALPHA_SODIUM  # compenser la moitié du sodium perdu, dès le début
     choisi, meilleur = -1, 1e9
     for i, b in enumerate(s["bidons"]):
         reste = b["volume"] - b["bu"]
@@ -645,6 +645,11 @@ def ajouter_point_pesee(sport, sueur, r_effort, ressenti, fiable):
         "sueur": arrondi(sueur, 0.01), "d": int(time.time())}]
 
 
+def reference_apres_pesee(sport, r):
+    cal = calibration(famille(sport))
+    r.update(reference=arrondi(cal["s_base"], 0.01), nb_pesees=cal["pesees"], at_ref=arrondi(cal["at_ref"], 0.1))
+
+
 def pesee_manuelle(recu):
     """Même calcul que peseeManuelle() : une pesée faite avant d'avoir le boîtier."""
     c = normaliser(recu)
@@ -675,8 +680,21 @@ def pesee_manuelle(recu):
     re = borner(re, R_EFFORT_MIN, R_EFFORT_MAX)
     r["r_effort"] = arrondi(re, 0.01)
     ajouter_point_pesee(c["sport"], sueur, re, c["ressenti"], not recu.get("hors"))
+    reference_apres_pesee(c["sport"], r)
     r["enregistree"] = True
     return r
+
+
+def corriger_derniere_sortie(km):
+    """Distance réellement parcourue, donnée à la fin : comme corrigerDerniereSortie() dans stockage.cpp."""
+    if not historique:
+        return
+    h = historique[-1]
+    h.update(km=round(km, 1), distance_saisie=True)
+    if h.get("resume"):
+        h["resume"].update(km=round(km, 1), distance_saisie=True)
+        if h["duree"]:
+            h["resume"]["totaux"]["vitesse_moy"] = round(km / (h["duree"] / 3600), 1)
 
 
 def resume_complet():
@@ -759,6 +777,8 @@ def pesee(recu):
         r["erreur"] = "valeur hors de la plage possible (0,1 à 3,5 L/h)"
         return r
     ajouter_point_pesee(dernier_resume["sport"], sueur, dernier_resume["r_effort_moy"], dernier_resume.get("ressenti"), not hors)
+    r["r_effort"] = dernier_resume["r_effort_moy"]
+    reference_apres_pesee(dernier_resume["sport"], r)
     r["enregistree"] = True
     dernier_resume["pesee"] = False
     return r
@@ -817,6 +837,11 @@ class Gestion(BaseHTTPRequestHandler):
             return self.config()
         if chemin == "/api/pesee":
             return self.repondre(pesee_manuelle(corps))
+        if chemin == "/api/sortie/meteo":
+            if s:
+                r = corps.get("ressenti")
+                s["ressenti"] = borner(round(r), -20, 50) if isinstance(r, (int, float)) and not isinstance(r, bool) else None
+            return self.repondre({"ok": True})
         if chemin == "/api/sortie/vitesse":
             x = entier(corps.get("x"), 1)
             acceleration = 16 if x >= 16 else 8 if x >= 8 else 4 if x >= 4 else 2 if x >= 2 else 1
@@ -873,6 +898,10 @@ class Gestion(BaseHTTPRequestHandler):
                       "remarques": str(corps.get("remarques", ""))[:1000]}
             if dernier_resume:
                 retour["sortie"] = dict(dernier_resume)
+            km = float(corps.get("distance") or 0)
+            if 0 < km < 500:
+                retour["distance_reelle"] = round(km, 1)
+                corriger_derniere_sortie(km)
             if isinstance(corps.get("pesee"), dict):
                 r = pesee(corps["pesee"])
                 if r:

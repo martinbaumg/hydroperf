@@ -44,3 +44,6 @@ void peseeManuelle(JsonVariantConst recu, JsonObject resultat);
 
 // Démo : fait passer le temps de la sortie 1, 2, 4, 8 ou 16 fois plus vite (les alertes restent réelles)
 void sortieAccelerer(int x);
+
+// Météo changée pendant la sortie : {"ressenti": 27} ou {"ressenti": "nsp"}
+void sortieMeteo(JsonVariantConst recu);

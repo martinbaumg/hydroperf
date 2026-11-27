@@ -195,6 +195,12 @@ static void definirRoutes() {
     retour["dosage"] = choixParmi(recu["dosage"], {"", "bien", "trop_souvent", "pas_assez", "quantites"});
     retour["remarques"] = texteCourt(recu["remarques"], 1000);
     sortieResume(retour["sortie"].to<JsonObject>());
+    // Distance réellement parcourue (km), quand rien ne l'a mesurée pendant la sortie
+    float km = recu["distance"] | 0.0;
+    if (km > 0 && km < 500) {
+      retour["distance_reelle"] = round(km * 10) / 10;
+      corrigerDerniereSortie(km);
+    }
     if (recu["pesee"].is<JsonObjectConst>()) {
       JsonDocument pesee;
       if (sortiePesee(recu["pesee"], pesee.to<JsonObject>())) retour["pesee"] = pesee;
@@ -219,6 +225,13 @@ static void definirRoutes() {
     JsonDocument doc;
     peseeManuelle(recu.as<JsonVariantConst>(), doc.to<JsonObject>());
     envoyerJson(doc);
+  });
+  // Météo changée pendant la sortie : {"ressenti": 27} ou {"ressenti": "nsp"}
+  server.on("/api/sortie/meteo", HTTP_POST, []() {
+    JsonDocument recu;
+    if (!lireCorps(recu)) return;
+    sortieMeteo(recu.as<JsonVariantConst>());
+    envoyerOk();
   });
   // Démo : {"x": 1|2|4|8|16}
   server.on("/api/sortie/vitesse", HTTP_POST, []() {

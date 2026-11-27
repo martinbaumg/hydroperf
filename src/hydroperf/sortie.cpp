@@ -36,8 +36,7 @@ static const int GORGEES_DECLENCHEMENT = 2;
 // GORGEES_MAX (3, les barres de l'écran) vient de ecran.h
 static const int ATTENTE_RECUP_MAX = 15 * 60;       // en course, on attend la récup si elle arrive dans 15 min
 static const int ATTENTE_RECUP_VELO = 5 * 60;       // à vélo on peut boire en roulant : 5 min au plus
-static const float ALPHA_SODIUM = 0.5;              // part du sodium perdu à compenser après 1 h
-static const float SODIUM_DEBUT_MG = 500;           // électrolytes dès 500 mg de sodium perdus
+static const float ALPHA_SODIUM = 0.5;              // part du sodium perdu à compenser
 static const size_t MAX_PESEES = 20;
 
 static const uint32_t SAUVEGARDE_TOUTES_LES_S = 60;
@@ -767,11 +766,11 @@ static bool attendreRecup() {
 
 // ---------- Alertes ----------
 
-// Bidon qui rapproche le plus « sodium apporté / sodium perdu » de α : 0 au début, puis 0,5 dès 500 mg
-// de sodium perdus (plus tôt quand on transpire beaucoup ou que la sueur est salée).
-// À égalité, on préfère alors un bidon sucré (énergie). -1 si tous les bidons sont vides.
+// Bidon qui rapproche le plus « sodium apporté / sodium perdu » de α = 0,5 : on vise à compenser la moitié
+// du sodium perdu, dès le début (avec plusieurs bidons, l'eau et la boisson salée alternent).
+// À égalité, on préfère un bidon sucré (énergie). -1 si tous les bidons sont vides.
 static int choisirBidon(float ml) {
-  float alpha = s.sodiumPerdu >= SODIUM_DEBUT_MG ? ALPHA_SODIUM : 0;
+  float alpha = ALPHA_SODIUM;
   int choisi = -1;
   float meilleur = 1e9;
   for (size_t i = 0; i < s.bidons.size(); i++) {
@@ -796,8 +795,7 @@ static void afficherEtat() {
   } else if (s.pause) {
     ecranMessage("En pause");
   } else {
-    String texte = "Prochaine gorgée dans " + String(max(1, (secondesAvantAlerte() + 59) / 60)) + " min";
-    ecranMessage(texte.c_str());
+    ecranEffacer();  // pendant la sortie, l'écran ne s'allume que pour les alertes
   }
 }
 
@@ -1146,6 +1144,15 @@ static void ajouterPointPesee(const char* sport, float sueur, float rEffort, Jso
   enregistrerProfil();
 }
 
+// Après une pesée : la nouvelle sueur de référence (moyenne des pesées, ramenées à une sortie longue
+// tranquille et à la température de référence), pour l'expliquer à l'utilisateur
+static void referenceApresPesee(const char* sport, JsonObject resultat) {
+  Calibration c = calibration(famille(sport));
+  resultat["reference"] = arrondi(c.sBase, 0.01);
+  resultat["nb_pesees"] = c.nbPesees;
+  resultat["at_ref"] = arrondi(c.atRef, 0.1);
+}
+
 // Pesée de fin de sortie (questionnaire) : {"poids_apres":69.2, "reste":"vides|quart|moitie|pleins", "hors":false}
 bool sortiePesee(JsonVariantConst recu, JsonObject resultat) {
   if (dernierResume.isNull() || !(dernierResume["pesee"] | false)) return false;
@@ -1175,6 +1182,8 @@ bool sortiePesee(JsonVariantConst recu, JsonObject resultat) {
   }
   ajouterPointPesee(dernierResume["sport"] | "course", sueur, dernierResume["r_effort_moy"] | 1.0,
                     dernierResume["ressenti"], !hors);
+  resultat["r_effort"] = dernierResume["r_effort_moy"] | 1.0;
+  referenceApresPesee(dernierResume["sport"] | "course", resultat);
   resultat["enregistree"] = true;
   dernierResume["pesee"] = false;  // une seule pesée par sortie
   return true;
@@ -1219,6 +1228,7 @@ void peseeManuelle(JsonVariantConst recu, JsonObject resultat) {
   rE = constrain(rE, R_EFFORT_MIN, R_EFFORT_MAX);
   resultat["r_effort"] = arrondi(rE, 0.01);
   ajouterPointPesee(sport.c_str(), sueur, rE, c["ressenti"], !hors);
+  referenceApresPesee(sport.c_str(), resultat);
   resultat["enregistree"] = true;
 }
 
@@ -1243,6 +1253,14 @@ void sortieTick() {
   for (int i = 0; i < acceleration; i++) avancerUneSeconde();
   // Fin de l'affichage de la consigne (en secondes réelles) : la LED s'éteint, l'écran s'éteint tout seul
   if (s.alerte > 0 && --s.alerte == 0) ecrire(PIN_LED, false);
+}
+
+// Météo changée pendant la sortie : {"ressenti": 27} ou {"ressenti": "nsp"} (je ne sais pas)
+void sortieMeteo(JsonVariantConst recu) {
+  if (!s.active) return;
+  s.ressentiConnu = recu["ressenti"].is<float>();
+  s.ressenti = s.ressentiConnu ? constrain((float)recu["ressenti"], -20.0f, 50.0f) : 0;
+  sauvegarderEnCours();
 }
 
 void sortieAccelerer(int x) {

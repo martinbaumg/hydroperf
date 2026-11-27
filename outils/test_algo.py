@@ -115,13 +115,17 @@ def test_fractionne_detecte_avec_le_gps():
 
 
 def test_choix_du_bidon():
-    """De l'eau tant qu'on a perdu moins de 500 mg de sodium, puis le bidon salé revient régulièrement."""
+    """Dès le début, le boîtier vise à compenser la moitié du sodium perdu : boisson salée d'abord, puis l'eau."""
     reinitialiser()
     s = sortie({"sport": "course", "seance": "longue", "duree": 150, "ressenti": 25,
                 "bidons": [{"volume": 750, "type": "eau"}, {"volume": 750, "type": "isotonique"}]}, 150 * 60)
-    premieres = [g for g in s["gorgees"] if g[0] < 20 * 60]
-    assert premieres and {g[2] for g in premieres} == {0}, premieres
-    assert 1 in [g[2] for g in s["gorgees"]], s["gorgees"]
+    assert s["gorgees"][0][2] == 1, s["gorgees"]
+    assert 0 < s["sodium_apporte"] / s["sodium_perdu"] <= 0.55
+    # Avec des pastilles très salées (2 000 mg/L), l'eau et la boisson salée alternent
+    reinitialiser()
+    s = sortie({"sport": "course", "seance": "longue", "duree": 90, "ressenti": 25,
+                "bidons": [{"volume": 750, "type": "eau"}, {"volume": 750, "type": "electrolyte", "sodium": 2000}]}, 90 * 60)
+    assert {g[2] for g in s["gorgees"]} == {0, 1}, s["gorgees"]
 
 
 def test_objectif_ajuste():

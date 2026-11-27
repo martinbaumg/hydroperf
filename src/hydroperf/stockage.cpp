@@ -179,6 +179,51 @@ void effacerHistorique() {
   supprimerFichier(FICHIER_HISTORIQUE);
 }
 
+// Distance réellement parcourue, donnée à la fin : on corrige la dernière sortie de l'historique
+// (sa distance, et l'allure moyenne de son résumé). On recopie le fichier en changeant la dernière ligne.
+bool corrigerDerniereSortie(float km) {
+  File src = LittleFS.open(FICHIER_HISTORIQUE, "r");
+  if (!src) return false;
+  const char* TEMP = "/historique.tmp";
+  File tmp = LittleFS.open(TEMP, "w");
+  String precedente;
+  bool vide = true;
+  while (src.available()) {
+    String ligne = src.readStringUntil('\n');
+    ligne.trim();
+    if (ligne.isEmpty()) continue;
+    if (!vide) { tmp.print(precedente); tmp.print('\n'); }
+    precedente = ligne;
+    vide = false;
+  }
+  src.close();
+  if (vide) {
+    tmp.close();
+    LittleFS.remove(TEMP);
+    return false;
+  }
+  JsonDocument d;
+  if (deserializeJson(d, precedente)) {
+    tmp.print(precedente);
+  } else {
+    float heures = (d["duree"] | 0) / 3600.0;
+    float kmArrondi = round(km * 10) / 10;
+    d["km"] = kmArrondi;
+    d["distance_saisie"] = true;
+    if (d["resume"].is<JsonObject>()) {
+      d["resume"]["km"] = kmArrondi;
+      d["resume"]["distance_saisie"] = true;
+      if (heures > 0) d["resume"]["totaux"]["vitesse_moy"] = round(km / heures * 10) / 10;
+    }
+    serializeJson(d, tmp);
+  }
+  tmp.print('\n');
+  tmp.close();
+  LittleFS.remove(FICHIER_HISTORIQUE);
+  LittleFS.rename(TEMP, FICHIER_HISTORIQUE);
+  return true;
+}
+
 // ---------- Retours de fin de sortie ----------
 
 const char* FICHIER_RETOURS = "/retours.jsonl";
