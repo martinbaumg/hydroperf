@@ -181,7 +181,8 @@ void effacerHistorique() {
 
 // Distance réellement parcourue, donnée à la fin : on corrige la dernière sortie de l'historique
 // (sa distance, et l'allure moyenne de son résumé). On recopie le fichier en changeant la dernière ligne.
-bool corrigerDerniereSortie(float km) {
+// Bilan de fin de sortie corrigé par l'utilisateur : distance (km) et eau vraiment bue (mL), < 0 = inchangé
+bool corrigerDerniereSortie(float km, float bu) {
   File src = LittleFS.open(FICHIER_HISTORIQUE, "r");
   if (!src) return false;
   const char* TEMP = "/historique.tmp";
@@ -207,13 +208,27 @@ bool corrigerDerniereSortie(float km) {
     tmp.print(precedente);
   } else {
     float heures = (d["duree"] | 0) / 3600.0;
-    float kmArrondi = round(km * 10) / 10;
-    d["km"] = kmArrondi;
-    d["distance_saisie"] = true;
-    if (d["resume"].is<JsonObject>()) {
-      d["resume"]["km"] = kmArrondi;
-      d["resume"]["distance_saisie"] = true;
-      if (heures > 0) d["resume"]["totaux"]["vitesse_moy"] = round(km / heures * 10) / 10;
+    bool resume = d["resume"].is<JsonObject>();
+    if (km >= 0) {
+      float kmArrondi = round(km * 10) / 10;
+      d["km"] = kmArrondi;
+      d["distance_saisie"] = true;
+      if (resume) {
+        d["resume"]["km"] = kmArrondi;
+        d["resume"]["distance_saisie"] = true;
+        if (heures > 0) d["resume"]["totaux"]["vitesse_moy"] = round(km / heures * 10) / 10;
+      }
+    }
+    if (bu >= 0) {
+      d["bu"] = round(bu);
+      d["bu_saisi"] = true;
+      if (resume) {
+        JsonObject tot = d["resume"]["totaux"];
+        tot["bu"] = round(bu);
+        float poids = d["resume"]["poids"] | 70.0;
+        tot["perte_poids"] = round(((float)(tot["perdue"] | 0) - bu) / 1000 / poids * 1000) / 10;
+        d["resume"]["bu_saisi"] = true;
+      }
     }
     serializeJson(d, tmp);
   }

@@ -57,6 +57,9 @@ WebServer server(80);
 // il répond 192.168.4.1 pour hydroperf.local (utile pour Android, qui gère mal le mDNS)
 DNSServer dns;
 
+// Dernier bilan de fin de sortie vérifié par l'utilisateur, joint au questionnaire qui suit
+static JsonDocument dernierBilan;
+
 static void envoyerJson(const JsonDocument& doc) {
   String texte;
   serializeJson(doc, texte);
@@ -179,6 +182,28 @@ static void definirRoutes() {
   // {"a_bu":"oui|en_partie|non", "raisons":["alerte_ratee",...], "raison_autre":"...",
   //  "dosage":"bien|trop_souvent|pas_assez|quantites", "remarques":"...",
   //  "pesee":{"poids_apres":69.2, "reste":"vides|quart|moitie|pleins", "hors":false}}  (si la case était cochée)
+  // Bilan de fin de sortie, vérifié par l'utilisateur avant le questionnaire :
+  // {"bu": mL vraiment bus, "distance": km, "pesee": {"poids_apres", "hors"}}
+  server.on("/api/sortie/bilan", HTTP_POST, []() {
+    JsonDocument recu;
+    if (!lireCorps(recu)) return;
+    dernierBilan.clear();
+    float bu = recu["bu"] | -1.0, km = recu["distance"] | -1.0;
+    if (bu > 10000) bu = -1;
+    if (km > 500) km = -1;
+    corrigerDerniereSortie(km, bu);
+    if (bu >= 0) dernierBilan["bu_reel"] = round(bu);
+    if (km >= 0) dernierBilan["distance_reelle"] = round(km * 10) / 10;
+    if (recu["pesee"].is<JsonObjectConst>()) {
+      JsonDocument p;
+      p.set(recu["pesee"]);
+      if (bu >= 0) p["bu"] = bu;
+      JsonDocument pesee;
+      if (sortiePesee(p.as<JsonVariantConst>(), pesee.to<JsonObject>())) dernierBilan["pesee"] = pesee;
+    }
+    envoyerJson(dernierBilan);
+  });
+
   server.on("/api/retour", HTTP_POST, []() {
     JsonDocument recu;
     if (!lireCorps(recu)) return;
@@ -205,6 +230,10 @@ static void definirRoutes() {
       JsonDocument pesee;
       if (sortiePesee(recu["pesee"], pesee.to<JsonObject>())) retour["pesee"] = pesee;
     }
+    // Le bilan vérifié juste avant (eau bue, distance, pesée) accompagne les réponses
+    for (JsonPairConst kv : dernierBilan.as<JsonObjectConst>())
+      if (retour[kv.key()].isNull()) retour[kv.key()] = kv.value();
+    dernierBilan.clear();
     if (!ajouterRetour(retour)) {
       server.send(507, "application/json", "{\"erreur\":\"memoire des retours pleine\"}");
       return;

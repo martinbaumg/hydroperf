@@ -32,11 +32,17 @@ static const float PLAFOND = 0.8;                   // L/h : haut de la fourchet
 static const float PLAFOND_PESEES = 1.0;            // L/h : si les pesées montrent qu'il transpire beaucoup
 static const int INTERVALLE_MIN = 5 * 60;           // secondes minimum entre deux alertes
 static const int INTERVALLE_MAX = 20 * 60;          // rappel de sécurité
-static const int GORGEES_DECLENCHEMENT = 2;
+// Gorgées visées par alerte selon l'intensité : plus l'effort est dur, plus on boit par petites quantités
+// (l'estomac se vide moins vite et on a du mal à avaler en soufflant fort)
+static const float R_EFFORT_FACILE = 0.9, R_EFFORT_DUR = 1.1;
 // GORGEES_MAX (3, les barres de l'écran) vient de ecran.h
 static const int ATTENTE_RECUP_MAX = 15 * 60;       // en course, on attend la récup si elle arrive dans 15 min
 static const int ATTENTE_RECUP_VELO = 5 * 60;       // à vélo on peut boire en roulant : 5 min au plus
-static const float ALPHA_SODIUM = 0.5;              // part du sodium perdu à compenser
+// Sodium visé dans ce qu'on boit (mg/L) : fourchette de l'ACSM, 20 à 30 mmol/L (460 à 690 mg/L),
+// le bas pour une sueur peu salée, le haut pour une sueur salée
+static const float SODIUM_CIBLE_NON = 460, SODIUM_CIBLE_NSP = 575, SODIUM_CIBLE_OUI = 690;
+// Glucides : 60 g/h au plus (ACSM, sorties de 1 à 2 h 30), avec 15 g d'avance pour la première alerte
+static const float GLUCIDES_MAX_H = 60, GLUCIDES_AVANCE = 15;
 static const size_t MAX_PESEES = 20;
 
 static const uint32_t SAUVEGARDE_TOUTES_LES_S = 60;
@@ -119,6 +125,21 @@ static float sodiumSueurMgL() {
   return 830;
 }
 
+// Sodium visé dans ce qu'on boit (mg/L), selon la même question
+static float sodiumCibleMgL() {
+  const char* sel = profil["sel"] | "nsp";
+  if (strcmp(sel, "oui") == 0) return SODIUM_CIBLE_OUI;
+  if (strcmp(sel, "non") == 0) return SODIUM_CIBLE_NON;
+  return SODIUM_CIBLE_NSP;
+}
+
+// Gorgées visées par alerte : 3 à faible effort, 2 à effort moyen, 1 à effort dur
+static int gorgeesVisees(float rEffort) {
+  if (rEffort < R_EFFORT_FACILE) return 3;
+  if (rEffort <= R_EFFORT_DUR) return 2;
+  return 1;
+}
+
 // ---------- Calibration : S_base, AT_ref et k, avec les pesées de l'utilisateur ----------
 
 struct Calibration {
@@ -198,6 +219,7 @@ void calibrationEtat(JsonObject o) {
   }
   o["pesees"] = profil["pesees"].size();
   o["sodium_sueur"] = sodiumSueurMgL();
+  o["sodium_cible"] = sodiumCibleMgL();
   o["p_ref"] = round(puissanceRef());
 }
 
@@ -409,8 +431,8 @@ struct Plan {
   int gorgees;     // gorgées par alerte
 };
 
-// Rythme moyen des alertes pour un débit à boire (mL/min)
-static Plan planPour(float mlParMin) {
+// Rythme moyen des alertes pour un débit à boire (mL/min) et un nombre de gorgées visé
+static Plan planPour(float mlParMin, int visees) {
   int g = gorgeeMl();
   // « Je calcule pour toi » désactivé : intervalle choisi dans les réglages
   if (!(reglages["auto"] | true)) {
@@ -418,10 +440,10 @@ static Plan planPour(float mlParMin) {
     return {intervalle, constrain((int)round(mlParMin * intervalle / g), 1, 8)};
   }
   if (mlParMin <= 0) return {INTERVALLE_MAX / 60, 1};
-  float t2 = GORGEES_DECLENCHEMENT * g / mlParMin;  // minutes pour atteindre 2 gorgées
-  if (t2 > INTERVALLE_MAX / 60) return {INTERVALLE_MAX / 60, max(1, min(GORGEES_MAX, (int)(INTERVALLE_MAX / 60 * mlParMin / g)))};
-  if (t2 >= INTERVALLE_MIN / 60) return {(int)round(t2), GORGEES_DECLENCHEMENT};
-  return {INTERVALLE_MIN / 60, min(GORGEES_MAX, (int)(INTERVALLE_MIN / 60 * mlParMin / g))};
+  float t = visees * g / mlParMin;  // minutes pour atteindre les gorgées visées
+  if (t > INTERVALLE_MAX / 60) return {INTERVALLE_MAX / 60, max(1, min(GORGEES_MAX, (int)(INTERVALLE_MAX / 60 * mlParMin / g)))};
+  if (t >= INTERVALLE_MIN / 60) return {(int)round(t), visees};
+  return {INTERVALLE_MIN / 60, max(1, min(GORGEES_MAX, (int)(INTERVALLE_MIN / 60 * mlParMin / g)))};
 }
 
 // ---------- Prévision (formulaire « Prépare ta sortie ») ----------
@@ -435,7 +457,7 @@ void prevoir(JsonVariantConst config, JsonVariant p) {
   int duree = dureeEstimee(config);
   float f = partACompenser(sueur, duree);
   float aBoire = min(f * sueur, plafond(c));  // L/h
-  Plan plan = planPour(aBoire * 1000 / 60);
+  Plan plan = planPour(aBoire * 1000 / 60, gorgeesVisees(rE));
 
   int capacite = 0;
   for (JsonVariantConst b : config["bidons"].as<JsonArrayConst>()) capacite += b["volume"] | 0;
@@ -555,7 +577,8 @@ struct EtatSortie {
   Detail detail;
   bool pesee = false;
   float poidsAvant = 0;
-  float part = PART_SANS_DUREE;  // part de la sueur à compenser, fixée au départ
+  float rEffortPrevu = 1;  // R_effort de la prévision (pour les 10 premières minutes)
+  float part = PART_SANS_DUREE;  // part de la sueur à compenser (au départ, puis si la sortie dure plus)
   float aBoirePrevu = 0;         // L/h de la prévision, pour estimer le 1er rappel pendant l'échauffement
   int objectifInitial = 0;
   std::vector<Bidon> bidons;
@@ -721,10 +744,37 @@ static void changerPhase(Phase p) {
   s.conditionDepuis = 0;
 }
 
+// Sans capteur de puissance ni de vitesse : les phases suivent le détail du fractionné donné par l'utilisateur
+// (pas de dernière récupération : on passe directement au retour au calme)
+static void phasesPrevues() {
+  const Detail& d = s.detail;
+  int t = s.duree, cycle = d.effort + d.recup, debut = 0, rep = 0;
+  Phase p = ECHAUFFEMENT;
+  if (t >= d.echauffement) {
+    int dans = t - d.echauffement;
+    rep = min(dans / cycle, d.repetitions - 1);
+    int pos = dans - rep * cycle;
+    if (pos < d.effort) p = EFFORT, debut = t - pos;
+    else if (rep < d.repetitions - 1) p = RECUP, debut = t - (pos - d.effort);
+    else p = CALME, debut = d.echauffement + rep * cycle + d.effort;
+    rep++;
+  }
+  if (p != s.phase) {
+    s.phase = p;
+    s.debutPhase = debut;
+    s.repetition = rep;
+  }
+}
+
 static void suivrePhases() {
   float signal = s.signal;
-  if (s.seance != "fractionne" || signal <= 0) {
+  if (s.seance != "fractionne") {
     s.phase = AUCUNE;
+    return;
+  }
+  if (signal <= 0) {
+    if (s.detail.donne) phasesPrevues();
+    else s.phase = AUCUNE;
     return;
   }
   if (s.phase == AUCUNE) changerPhase(ECHAUFFEMENT);
@@ -766,20 +816,35 @@ static bool attendreRecup() {
 
 // ---------- Alertes ----------
 
-// Bidon qui rapproche le plus « sodium apporté / sodium perdu » de α = 0,5 : on vise à compenser la moitié
-// du sodium perdu, dès le début (avec plusieurs bidons, l'eau et la boisson salée alternent).
-// À égalité, on préfère un bidon sucré (énergie). -1 si tous les bidons sont vides.
+// Glucides déjà apportés trop vite ? (au plus 60 g/h, avec un peu d'avance pour la première alerte)
+static bool tropDeGlucides(int i, float ml) {
+  float g = s.glucidesApportes + min(ml, restant(i)) / 1000 * glucidesBoissonGL(s.bidons[i]);
+  return g > GLUCIDES_MAX_H * s.duree / 3600 + GLUCIDES_AVANCE;
+}
+
+// Bidon qui rapproche le plus le sodium apporté de ce qu'il faudrait : sodium visé (mg/L) × eau bue.
+// Si on a déjà bu assez salé, on prend de l'eau ; sinon la boisson salée : avec une boisson plus salée
+// que la cible (pastilles), l'eau et la boisson salée alternent. À égalité, on préfère un bidon sucré
+// (énergie), sauf s'il ferait dépasser 60 g de glucides par heure. -1 si tous les bidons sont vides.
 static int choisirBidon(float ml) {
-  float alpha = ALPHA_SODIUM;
+  float cible = sodiumCibleMgL();
   int choisi = -1;
   float meilleur = 1e9;
+  bool sansSucre = false;  // reste-t-il un bidon non sucré ?
+  bool assez = false;      // un bidon peut-il donner toute la consigne ? (sinon un bidon presque vide la couperait)
   for (size_t i = 0; i < s.bidons.size(); i++) {
-    if (restant(i) <= 0) continue;
-    float apporte = s.sodiumApporte + min(ml, restant(i)) / 1000 * sodiumBoissonMgL(s.bidons[i]);
-    float ecart = s.sodiumPerdu > 0 ? fabs(apporte / s.sodiumPerdu - alpha) : (apporte > 0 ? 1 : 0);
+    if (restant(i) > 0 && !sucre(s.bidons[i])) sansSucre = true;
+    if (restant(i) >= ml) assez = true;
+  }
+  for (size_t i = 0; i < s.bidons.size(); i++) {
+    if (restant(i) <= 0 || (assez && restant(i) < ml)) continue;
+    if (sansSucre && sucre(s.bidons[i]) && tropDeGlucides(i, ml)) continue;
+    float bu = min(ml, restant(i));
+    float apporte = s.sodiumApporte + bu / 1000 * sodiumBoissonMgL(s.bidons[i]);
+    float ecart = fabs(apporte / (cible * (s.buMl + bu) / 1000) - 1);
     bool mieux = choisi < 0 || ecart < meilleur - 0.02;
     bool egalite = choisi >= 0 && fabs(ecart - meilleur) <= 0.02;
-    if (mieux || (egalite && alpha > 0 && sucre(s.bidons[i]) && !sucre(s.bidons[choisi]))) {
+    if (mieux || (egalite && sucre(s.bidons[i]) && !sucre(s.bidons[choisi]))) {
       choisi = i;
       meilleur = min(meilleur, ecart);
     }
@@ -834,11 +899,17 @@ static void declencherAlerte() {
   signaler();
 }
 
+// Gorgées visées maintenant : pendant les 10 premières minutes, l'échauffement ferait croire à un effort
+// facile, on prend donc au moins l'effort prévu
+static int gorgeesMaintenant() {
+  return gorgeesVisees(s.duree < 600 ? max(s.rEffort, s.rEffortPrevu) : s.rEffort);
+}
+
 // L'alerte est-elle due ? (sans tenir compte de l'attente de la récupération)
 static bool alerteDue() {
   uint32_t depuis = s.duree - s.derniereAlerte;
   if (!(reglages["auto"] | true)) return depuis >= (uint32_t)max(1, (int)(reglages["intervalle"] | 12)) * 60;
-  return (depuis >= (uint32_t)INTERVALLE_MIN && s.compteur >= GORGEES_DECLENCHEMENT * gorgeeMl())
+  return (depuis >= (uint32_t)INTERVALLE_MIN && s.compteur >= gorgeesMaintenant() * gorgeeMl())
          || depuis >= (uint32_t)INTERVALLE_MAX;
 }
 
@@ -848,7 +919,7 @@ static int secondesAvantAlerte() {
   if (!(reglages["auto"] | true)) return max(0, (int)(reglages["intervalle"] | 12) * 60 - depuis);
   // Pendant l'échauffement, le débit du moment est trop bas pour estimer : on prend celui prévu
   float mlParS = (s.duree < 600 ? max(s.aBoire, s.aBoirePrevu) : s.aBoire) * 1000 / 3600;
-  float manque = max(0.0f, GORGEES_DECLENCHEMENT * gorgeeMl() - s.compteur);
+  float manque = max(0.0f, gorgeesMaintenant() * gorgeeMl() - s.compteur);
   int t = mlParS > 0 ? (int)ceil(manque / mlParS) : INTERVALLE_MAX;
   t = max(t, INTERVALLE_MIN - depuis);
   t = min(t, INTERVALLE_MAX - depuis);
@@ -1052,6 +1123,7 @@ bool sortieDemarrer(JsonVariantConst recu) {
   s.part = p["calcul"]["part"];
   s.objectifInitial = p["objectif"];
   s.aBoirePrevu = p["calcul"]["a_boire"];
+  s.rEffortPrevu = p["calcul"]["r_effort"];
   acceleration = 1;
   s.decalageEchauffement = random(-180, 181);
   for (JsonVariantConst b : config["bidons"].as<JsonArrayConst>()) {
@@ -1289,6 +1361,9 @@ static void avancerUneSeconde() {
   Calibration c = calibration(famille(s.sport));
   s.rMeteo = s.ressentiConnu ? constrain(exp(c.k * (s.ressenti - c.atRef)), R_METEO_MIN, R_METEO_MAX) : 1;
   s.sueur = min(c.sBase * s.rEffort * s.rMeteo, SUEUR_MAX);
+  // Sortie plus longue que prévu : f se recalcule avec la durée réelle (elle ne peut que monter)
+  if (s.duree % 60 == 0 && s.duree >= 1800)
+    s.part = max(s.part, partACompenser(s.perdueMl / 1000 / (s.duree / 3600.0), s.duree / 60));
   s.aBoire = min(s.part * s.sueur, plafond(c));
   s.perdueMl += s.sueur * 1000 / 3600;
   s.sodiumPerdu += s.sueur / 3600 * sodiumSueurMgL();
@@ -1348,7 +1423,7 @@ void sortieEtat(JsonDocument& doc) {
     d["recup"] = s.detail.recup;
     d["calme"] = s.detail.calme;
   }
-  Plan plan = planPour(s.aBoire * 1000 / 60);
+  Plan plan = planPour(s.aBoire * 1000 / 60, gorgeesMaintenant());
   doc["plan"]["intervalle"] = plan.intervalle;
   doc["plan"]["gorgees"] = plan.gorgees;
   // D'où viennent les estimations (tout est simulé dans ce prototype)

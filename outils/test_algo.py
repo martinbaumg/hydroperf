@@ -38,7 +38,7 @@ def test_exemple_du_document():
     proche(fb.part_a_compenser(sueur, 120), 0.50)
     proche(fb.part_a_compenser(sueur, 240), 0.72)
     proche(min(fb.part_a_compenser(sueur, 120) * sueur, fb.plafond(cal)), 0.47)
-    assert fb.plan_pour(0.47 * 1000 / 60) == (8, 2), fb.plan_pour(0.47 * 1000 / 60)
+    assert fb.plan_pour(0.47 * 1000 / 60, 2) == (8, 2), fb.plan_pour(0.47 * 1000 / 60, 2)
 
 
 def test_sodium():
@@ -115,17 +115,83 @@ def test_fractionne_detecte_avec_le_gps():
 
 
 def test_choix_du_bidon():
-    """Dès le début, le boîtier vise à compenser la moitié du sodium perdu : boisson salée d'abord, puis l'eau."""
+    """Le sodium bu vise la fourchette de l'ACSM (575 mg/L sans savoir) : l'eau et la boisson salée alternent."""
     reinitialiser()
-    s = sortie({"sport": "course", "seance": "longue", "duree": 150, "ressenti": 25,
-                "bidons": [{"volume": 750, "type": "eau"}, {"volume": 750, "type": "isotonique"}]}, 150 * 60)
+    # Isotonique (600 mg/L) : presque à la cible, elle passe d'abord, avec parfois une gorgée d'eau
+    s = sortie({"sport": "course", "seance": "longue", "duree": 90, "ressenti": 25,
+                "bidons": [{"volume": 750, "type": "eau"}, {"volume": 750, "type": "isotonique"}]}, 90 * 60)
     assert s["gorgees"][0][2] == 1, s["gorgees"]
-    assert 0 < s["sodium_apporte"] / s["sodium_perdu"] <= 0.55
-    # Avec des pastilles très salées (2 000 mg/L), l'eau et la boisson salée alternent
+    assert 500 <= s["sodium_apporte"] / s["bu"] * 1000 <= 610, s["sodium_apporte"] / s["bu"] * 1000
+    # Pastilles d'électrolytes (900 mg/L) : l'eau et les électrolytes alternent, autour de 575 mg/L
     reinitialiser()
     s = sortie({"sport": "course", "seance": "longue", "duree": 90, "ressenti": 25,
-                "bidons": [{"volume": 750, "type": "eau"}, {"volume": 750, "type": "electrolyte", "sodium": 2000}]}, 90 * 60)
+                "bidons": [{"volume": 750, "type": "eau"}, {"volume": 750, "type": "electrolyte"}]}, 90 * 60)
     assert {g[2] for g in s["gorgees"]} == {0, 1}, s["gorgees"]
+    proche(s["sodium_apporte"] / s["bu"] * 1000, 575, 60)
+    # Sueur salée : on vise plus haut (690 mg/L)
+    reinitialiser(sel="oui")
+    assert fb.sodium_cible() == 690
+
+
+def test_glucides_par_heure():
+    """Une boisson très sucrée (150 g/L) ne fait pas dépasser 60 g de glucides par heure : l'eau prend le relais."""
+    reinitialiser()
+    s = sortie({"sport": "course", "seance": "longue", "duree": 120, "ressenti": 30,
+                "bidons": [{"volume": 750, "type": "eau"}, {"volume": 750, "type": "isotonique", "glucides": 150}]}, 120 * 60)
+    assert s["glucides"] <= 60 * 2 + 15, s["glucides"]
+    assert {g[2] for g in s["gorgees"]} == {0, 1}, s["gorgees"]
+
+
+def test_gorgees_selon_l_effort():
+    """3 gorgées visées à faible effort, 2 à effort moyen, 1 à effort dur : un fractionné les donne toutes."""
+    assert (fb.gorgees_visees(0.8), fb.gorgees_visees(1.0), fb.gorgees_visees(1.3)) == (3, 2, 1)
+    reinitialiser(poids=70, ftp=250, fc_repos=50, fc_max=190, capteur_puissance=True, sel="oui")
+    s = sortie({"sport": "velo", "seance": "fractionne", "ressenti": 28, "vitesse": 28,
+                "detail": {"echauffement_min": 20, "repetitions": 3, "effort_s": 600, "recup_s": 180,
+                           "retour_calme_min": 20, "vitesse_effort": 34},
+                "bidons": [{"volume": 750, "type": "eau"}, {"volume": 500, "type": "isotonique"}]}, 76 * 60)
+    assert {round(g[1] / 30) for g in s["gorgees"]} == {1, 2, 3}, s["gorgees"]
+
+
+def test_fractionne_sans_capteur():
+    """Sans capteur, les phases suivent le détail du fractionné : pas d'alerte en pleine fraction."""
+    reinitialiser(capteur_cardio=False, allure_ref=330)
+    config = {"sport": "course", "seance": "fractionne", "ressenti": 20,
+              "detail": {"echauffement_min": 20, "repetitions": 3, "effort_m": 3000, "allure_effort": 240,
+                         "recup_s": 180, "retour_calme_min": 10},
+              "bidons": [{"volume": 500, "type": "eau"}]}
+    fb.s = fb.demarrer(fb.normaliser(config))
+    phases, alertes_en_effort = [], 0
+    for _ in range(fb.duree_detail(fb.s["detail"])):
+        avant = fb.s["rappels"]
+        fb.tick()
+        if not phases or phases[-1] != fb.s["phase"]:
+            phases.append(fb.s["phase"])
+        if fb.s["rappels"] > avant and fb.s["phase"] == "effort":
+            alertes_en_effort += 1
+    assert phases == ["echauffement", "effort", "recup", "effort", "recup", "effort", "calme"], phases
+    assert alertes_en_effort == 0
+
+
+def test_part_recalculee_si_plus_long():
+    """Sortie prévue 1 h mais qui dure 4 h : f se recalcule avec la durée réelle et monte."""
+    reinitialiser(poids=60)
+    s = sortie({"sport": "course", "seance": "longue", "duree": 60, "ressenti": 28,
+                "bidons": [{"volume": 750, "type": "eau"}]}, 4 * 3600)
+    assert s["part"] > 0.6, s["part"]
+
+
+def test_bilan_corrige():
+    """Fin de sortie : l'eau vraiment bue et la distance corrigent l'historique."""
+    reinitialiser()
+    fb.historique.clear()
+    fb.s = fb.demarrer(fb.normaliser({"sport": "course", "seance": "longue", "duree": 60, "ressenti": 20,
+                                       "bidons": [{"volume": 500, "type": "eau"}]}))
+    fb.simuler_en_entier()
+    fb.corriger_derniere_sortie(10.4, 450)
+    h = fb.historique[-1]
+    assert h["bu"] == 450 and h["resume"]["totaux"]["bu"] == 450 and h["resume"]["km"] == 10.4
+    proche(h["resume"]["totaux"]["vitesse_moy"], 10.4)
 
 
 def test_objectif_ajuste():

@@ -23,7 +23,7 @@ void enregistrerCourses();
 // Historique : une ligne JSON par sortie terminée dans /historique.jsonl
 void ajouterHistorique(const JsonDocument& sortie);
 void effacerHistorique();
-bool corrigerDerniereSortie(float km);  // distance réellement parcourue, donnée à la fin
+bool corrigerDerniereSortie(float km, float bu = -1);  // distance réellement parcourue, donnée à la fin
 extern const char* FICHIER_HISTORIQUE;
 
 // Retours des utilisateurs en fin de sortie (pour l'équipe) : une ligne JSON par retour dans /retours.jsonl

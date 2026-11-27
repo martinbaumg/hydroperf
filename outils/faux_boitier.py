@@ -28,9 +28,11 @@ PERTE_VISEE = 0.015
 PART_MIN, PART_MAX, PART_SANS_DUREE = 0.5, 0.8, 0.6
 PLAFOND, PLAFOND_PESEES = 0.8, 1.0
 INTERVALLE_MIN, INTERVALLE_MAX = 5 * 60, 20 * 60
-GORGEES_DECLENCHEMENT, GORGEES_MAX = 2, 3
+GORGEES_MAX = 3
+R_EFFORT_FACILE, R_EFFORT_DUR = 0.9, 1.1   # 3 gorgées visées en dessous, 1 au-dessus, 2 entre
 ATTENTE_RECUP_MAX = 15 * 60
-ALPHA_SODIUM = 0.5
+SODIUM_CIBLE = {"non": 460, "nsp": 575, "oui": 690}   # mg/L bus : fourchette de l'ACSM (20-30 mmol/L)
+GLUCIDES_MAX_H, GLUCIDES_AVANCE = 60, 15
 ATTENTE_RECUP_VELO = 5 * 60
 MAX_PESEES = 20
 
@@ -52,6 +54,7 @@ courses = [dict(id=1, nom="Vélo du dimanche", **copy.deepcopy(CONFIG)),
 historique = []
 retours = []          # questionnaire de fin de sortie
 dernier_resume = {}   # résumé de la dernière sortie terminée, joint au retour
+dernier_bilan = {}    # bilan vérifié par l'utilisateur (eau bue, distance, pesée), joint au retour
 commandes = {"led": 0, "vibreur": 0, "buzzer": 0}
 s = None
 acceleration = 1   # démo : secondes de sortie par seconde réelle (1, 2, 4, 8 ou 16)
@@ -116,6 +119,14 @@ def sodium_sueur():
     return {"oui": 1100, "non": 600}.get(profil["sel"], 830)
 
 
+def sodium_cible():
+    return SODIUM_CIBLE.get(profil["sel"], SODIUM_CIBLE["nsp"])
+
+
+def gorgees_visees(r_effort):
+    return 3 if r_effort < R_EFFORT_FACILE else 2 if r_effort <= R_EFFORT_DUR else 1
+
+
 # ---------- Calibration ----------
 
 def s_base_defaut(fam):
@@ -167,7 +178,7 @@ def calibration_etat():
         c = calibration(fam)
         o[fam] = {"s_base": arrondi(c["s_base"], 0.01), "pesees": c["pesees"]}
         o.update(at_ref=arrondi(c["at_ref"], 0.1), k=arrondi(c["k"], 0.001), k_personnel=c["k_personnel"])
-    o.update(pesees=len(profil["pesees"]), sodium_sueur=sodium_sueur(), p_ref=round(puissance_ref()))
+    o.update(pesees=len(profil["pesees"]), sodium_sueur=sodium_sueur(), sodium_cible=sodium_cible(), p_ref=round(puissance_ref()))
     return o
 
 
@@ -316,19 +327,19 @@ def r_effort_declare(sport, seance, allure):
     return intensite_seance(seance) / I_REF
 
 
-def plan_pour(ml_par_min):
+def plan_pour(ml_par_min, visees):
     g = gorgee()
     if not reglages["auto"]:
         i = max(1, reglages["intervalle"])
         return i, borner(round(ml_par_min * i / g), 1, 8)
     if ml_par_min <= 0:
         return 20, 1
-    t2 = GORGEES_DECLENCHEMENT * g / ml_par_min
-    if t2 > 20:
+    t = visees * g / ml_par_min
+    if t > 20:
         return 20, max(1, min(GORGEES_MAX, int(20 * ml_par_min / g)))
-    if t2 >= 5:
-        return round(t2), GORGEES_DECLENCHEMENT
-    return 5, min(GORGEES_MAX, int(5 * ml_par_min / g))
+    if t >= 5:
+        return round(t), visees
+    return 5, max(1, min(GORGEES_MAX, int(5 * ml_par_min / g)))
 
 
 def prevoir(c):
@@ -339,7 +350,7 @@ def prevoir(c):
     duree = duree_estimee(c)
     f = part_a_compenser(sueur, duree)
     a_boire = min(f * sueur, plafond(cal))
-    intervalle, gorgees = plan_pour(a_boire * 1000 / 60)
+    intervalle, gorgees = plan_pour(a_boire * 1000 / 60, gorgees_visees(r_e))
     return {"transpiration": arrondi(sueur, 0.01), "par_heure": arrondi(a_boire * 1000, 10), "duree_estimee": duree,
             "objectif": arrondi(a_boire * 1000 * duree / 60, 50) if duree else 0, "intervalle": intervalle,
             "gorgees": gorgees, "capacite": sum(b["volume"] for b in c["bidons"]),
@@ -359,7 +370,7 @@ def demarrer(c):
             "duree_prevue": p["duree_estimee"], "allure": c["allure"], "distance_prevue": c["distance"], "vitesse_prevue": c["vitesse"],
             "ressenti": c["ressenti"], "glucides": 0,
             "detail": lire_detail(c), "pesee": c["pesee"], "poids_avant": c["poids_avant"],
-            "part": p["calcul"]["part"], "objectif_initial": p["objectif"], "a_boire_prevu": p["calcul"]["a_boire"],
+            "part": p["calcul"]["part"], "objectif_initial": p["objectif"], "a_boire_prevu": p["calcul"]["a_boire"], "r_effort_prevu": p["calcul"]["r_effort"],
             "bidons": [dict(b, bu=0) for b in c["bidons"]],
             "bu": 0, "perdue": 0, "a_boire_cumul": 0, "km": 0, "sodium_perdu": 0, "sodium_apporte": 0,
             "fc_somme": 0, "p_somme": 0, "r_effort_somme": 0, "duree_cardio": 0, "duree_puissance": 0, "duree_vitesse": 0,
@@ -478,10 +489,35 @@ def changer_phase(phase):
     s.update(phase=phase, debut_phase=s["duree"], moy_phase=0, nb_phase=0, condition=0)
 
 
+def phases_prevues():
+    """Sans capteur de puissance ni de vitesse : les phases suivent le détail du fractionné."""
+    d = s["detail"]
+    t, cycle, debut, rep, p = s["duree"], d["effort"] + d["recup"], 0, 0, "echauffement"
+    if t >= d["echauffement"]:
+        dans = t - d["echauffement"]
+        rep = min(dans // cycle, d["repetitions"] - 1)
+        pos = dans - rep * cycle
+        if pos < d["effort"]:
+            p, debut = "effort", t - pos
+        elif rep < d["repetitions"] - 1:
+            p, debut = "recup", t - (pos - d["effort"])
+        else:
+            p, debut = "calme", d["echauffement"] + rep * cycle + d["effort"]
+        rep += 1
+    if p != s["phase"]:
+        s.update(phase=p, debut_phase=debut, repetition=rep)
+
+
 def suivre_phases():
     signal = s["signal"]
-    if s["seance"] != "fractionne" or signal <= 0:
+    if s["seance"] != "fractionne":
         s["phase"] = None
+        return
+    if signal <= 0:
+        if s["detail"]["donne"]:
+            phases_prevues()
+        else:
+            s["phase"] = None
         return
     if s["phase"] is None:
         changer_phase("echauffement")
@@ -515,18 +551,27 @@ def attendre_recup():
     return s["detail"]["effort"] - (s["duree"] - s["debut_phase"]) <= attente_max_recup()
 
 
+def trop_de_glucides(b, ml):
+    g = s["glucides"] + min(ml, b["volume"] - b["bu"]) / 1000 * glucides_boisson(b)
+    return g > GLUCIDES_MAX_H * s["duree"] / 3600 + GLUCIDES_AVANCE
+
+
 def choisir_bidon(ml):
-    alpha = ALPHA_SODIUM  # compenser la moitié du sodium perdu, dès le début
+    """Rapproche le sodium apporté de « sodium visé × eau bue » ; à égalité un bidon sucré, sans dépasser 60 g/h."""
+    cible = sodium_cible()
     choisi, meilleur = -1, 1e9
+    sans_sucre = any(b["volume"] - b["bu"] > 0 and not sucre(b) for b in s["bidons"])
+    assez = any(b["volume"] - b["bu"] >= ml for b in s["bidons"])  # sinon un bidon presque vide couperait la consigne
     for i, b in enumerate(s["bidons"]):
         reste = b["volume"] - b["bu"]
-        if reste <= 0:
+        if reste <= 0 or (assez and reste < ml) or (sans_sucre and sucre(b) and trop_de_glucides(b, ml)):
             continue
-        apporte = s["sodium_apporte"] + min(ml, reste) / 1000 * sodium_boisson(b)
-        ecart = abs(apporte / s["sodium_perdu"] - alpha) if s["sodium_perdu"] > 0 else (1 if apporte > 0 else 0)
+        bu = min(ml, reste)
+        apporte = s["sodium_apporte"] + bu / 1000 * sodium_boisson(b)
+        ecart = abs(apporte / (cible * (s["bu"] + bu) / 1000) - 1)
         mieux = choisi < 0 or ecart < meilleur - 0.02
         egalite = choisi >= 0 and abs(ecart - meilleur) <= 0.02
-        if mieux or (egalite and alpha > 0 and sucre(b) and not sucre(s["bidons"][choisi])):
+        if mieux or (egalite and sucre(b) and not sucre(s["bidons"][choisi])):
             choisi, meilleur = i, min(meilleur, ecart)
     return choisi
 
@@ -549,11 +594,17 @@ def declencher_alerte():
     s["rappels"] += 1
 
 
+def gorgees_maintenant():
+    """Pendant les 10 premières minutes, au moins l'effort prévu (l'échauffement paraît trop facile)."""
+    r = max(s["r_effort"], s["r_effort_prevu"]) if s["duree"] < 600 else s["r_effort"]
+    return gorgees_visees(r)
+
+
 def alerte_due():
     depuis = s["duree"] - s["derniere_alerte"]
     if not reglages["auto"]:
         return depuis >= max(1, reglages["intervalle"]) * 60
-    return (depuis >= INTERVALLE_MIN and s["compteur"] >= GORGEES_DECLENCHEMENT * gorgee()) or depuis >= INTERVALLE_MAX
+    return (depuis >= INTERVALLE_MIN and s["compteur"] >= gorgees_maintenant() * gorgee()) or depuis >= INTERVALLE_MAX
 
 
 def secondes_avant_alerte():
@@ -562,7 +613,7 @@ def secondes_avant_alerte():
         return max(0, reglages["intervalle"] * 60 - depuis)
     # Pendant l'échauffement, on estime avec le débit prévu
     ml_par_s = (max(s["a_boire"], s["a_boire_prevu"]) if s["duree"] < 600 else s["a_boire"]) * 1000 / 3600
-    manque = max(0, GORGEES_DECLENCHEMENT * gorgee() - s["compteur"])
+    manque = max(0, gorgees_maintenant() * gorgee() - s["compteur"])
     t = math.ceil(manque / ml_par_s) if ml_par_s > 0 else INTERVALLE_MAX
     return max(0, min(max(t, INTERVALLE_MIN - depuis), INTERVALLE_MAX - depuis))
 
@@ -588,6 +639,9 @@ def tick(secondes=1):
         cal = calibration(famille(s["sport"]))
         s["r_meteo"] = r_meteo(s["ressenti"], cal)
         s["sueur"] = min(cal["s_base"] * s["r_effort"] * s["r_meteo"], SUEUR_MAX)
+        # Sortie plus longue que prévu : f se recalcule avec la durée réelle (elle ne peut que monter)
+        if s["duree"] % 60 == 0 and s["duree"] >= 1800:
+            s["part"] = max(s["part"], part_a_compenser(s["perdue"] / 1000 / (s["duree"] / 3600), s["duree"] // 60))
         s["a_boire"] = min(s["part"] * s["sueur"], plafond(cal))
         s["perdue"] += s["sueur"] * 1000 / 3600
         s["sodium_perdu"] += s["sueur"] / 3600 * sodium_sueur()
@@ -605,7 +659,7 @@ def tick(secondes=1):
 
 def etat_sortie():
     cal = calibration(famille(s["sport"]))
-    intervalle, gorgees = plan_pour(s["a_boire"] * 1000 / 60)
+    intervalle, gorgees = plan_pour(s["a_boire"] * 1000 / 60, gorgees_maintenant())
     e = {k: s[k] for k in ("sport", "seance", "duree", "duree_prevue", "ressenti", "rappels", "attente", "alerte", "pesee")}
     e.update(bu=round(s["bu"]), objectif=objectif(), perdue=round(s["perdue"]), sodium_perdu=round(s["sodium_perdu"]),
              sodium_apporte=round(s["sodium_apporte"]), glucides=round(s["glucides"]), fc=round(s["fc"]) if s["fc"] > 0 else None,
@@ -685,16 +739,25 @@ def pesee_manuelle(recu):
     return r
 
 
-def corriger_derniere_sortie(km):
-    """Distance réellement parcourue, donnée à la fin : comme corrigerDerniereSortie() dans stockage.cpp."""
+def corriger_derniere_sortie(km, bu=-1):
+    """Bilan corrigé à la fin (distance en km, eau bue en mL, < 0 = inchangé) : comme corrigerDerniereSortie()."""
     if not historique:
         return
     h = historique[-1]
-    h.update(km=round(km, 1), distance_saisie=True)
-    if h.get("resume"):
-        h["resume"].update(km=round(km, 1), distance_saisie=True)
-        if h["duree"]:
-            h["resume"]["totaux"]["vitesse_moy"] = round(km / (h["duree"] / 3600), 1)
+    r = h.get("resume")
+    if km >= 0:
+        h.update(km=round(km, 1), distance_saisie=True)
+        if r:
+            r.update(km=round(km, 1), distance_saisie=True)
+            if h["duree"]:
+                r["totaux"]["vitesse_moy"] = round(km / (h["duree"] / 3600), 1)
+    if bu >= 0:
+        h.update(bu=round(bu), bu_saisi=True)
+        if r:
+            t = r["totaux"]
+            t["bu"] = round(bu)
+            t["perte_poids"] = round((t["perdue"] - bu) / 1000 / r.get("poids", 70) * 100, 1)
+            r["bu_saisi"] = True
 
 
 def resume_complet():
@@ -837,6 +900,20 @@ class Gestion(BaseHTTPRequestHandler):
             return self.config()
         if chemin == "/api/pesee":
             return self.repondre(pesee_manuelle(corps))
+        if chemin == "/api/sortie/bilan":
+            dernier_bilan.clear()
+            bu = corps.get("bu") if isinstance(corps.get("bu"), (int, float)) and 0 <= corps["bu"] <= 10000 else -1
+            km = corps.get("distance") if isinstance(corps.get("distance"), (int, float)) and 0 <= corps["distance"] <= 500 else -1
+            corriger_derniere_sortie(km, bu)
+            if bu >= 0:
+                dernier_bilan["bu_reel"] = round(bu)
+            if km >= 0:
+                dernier_bilan["distance_reelle"] = round(km, 1)
+            if isinstance(corps.get("pesee"), dict):
+                r = pesee(dict(corps["pesee"], **({"bu": bu} if bu >= 0 else {})))
+                if r:
+                    dernier_bilan["pesee"] = r
+            return self.repondre(dict(dernier_bilan))
         if chemin == "/api/sortie/meteo":
             if s:
                 r = corps.get("ressenti")
@@ -906,6 +983,9 @@ class Gestion(BaseHTTPRequestHandler):
                 r = pesee(corps["pesee"])
                 if r:
                     retour["pesee"] = r
+            for k, v in dernier_bilan.items():
+                retour.setdefault(k, v)
+            dernier_bilan.clear()
             retours.append(retour)
             return self.repondre({"ok": True, **({"pesee": retour["pesee"]} if "pesee" in retour else {})})
         elif chemin == "/api/retours/effacer":

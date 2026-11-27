@@ -236,8 +236,8 @@ button:disabled{opacity:.5}
 </div>
 <div class="carte">
 <div class="titre-carte">Météo de ta sortie</div>
-<div class="texte2">La température ressentie annoncée par ton appli météo</div>
-<div class="rangee bas"><label class="champ">Ressenti<span><input type="number" inputmode="numeric" min="-20" max="120" step="1" placeholder="ex. 24" data-champ="ressenti"> <span data-unite="temp">°C</span></span></label><button class="puce" data-ressenti-nsp aria-pressed="false">Je ne sais pas</button></div>
+<div class="texte2">La température ressentie annoncée par ton appli météo (obligatoire : la chaleur change beaucoup ce que tu transpires)</div>
+<div class="rangee bas"><label class="champ">Ressenti<span><input type="number" inputmode="numeric" min="-20" max="120" step="1" placeholder="ex. 24" data-champ="ressenti"> <span data-unite="temp">°C</span></span></label></div>
 </div>
 <div class="carte" data-si-pesees hidden>
 <div class="cases"><label><input type="checkbox" data-champ="pesee"> Je me pèse aujourd'hui</label></div>
@@ -314,6 +314,20 @@ button:disabled{opacity:.5}
 </div>
 <div data-vue="resume" hidden>
 <div class="entete"><div><h1>Ta sortie en chiffres</h1><div class="texte2" data-v="res_sous_titre"></div></div></div>
+<div class="carte" data-res-bilan hidden>
+<div class="titre-carte">Ton bilan à vérifier</div>
+<div class="texte2 petit">Corrige si besoin, puis valide : tu passeras ensuite au questionnaire.</div>
+<label class="champ">Eau vraiment bue<span><input type="text" inputmode="numeric" data-bilan="bu"> mL</span></label>
+<div class="texte2 petit">Pré-rempli avec ce que les alertes t'ont demandé de boire : garde-le si tu as bu à chaque alerte, sinon corrige (soif, ravitaillement, alerte ratée…).</div>
+<label class="champ">Distance parcourue<span><input type="text" inputmode="decimal" data-bilan="distance"> km</span></label>
+<div class="texte2 petit" data-v="bilan_distance_aide"></div>
+<div class="groupe" data-bilan-pesee hidden>
+<label class="champ">Poids après la sortie<span><input type="text" inputmode="decimal" data-bilan="poids_apres"> kg</span></label>
+<div class="texte2 petit">As-tu bu autre chose ou uriné pendant la sortie ?</div>
+<div class="segment" role="group" aria-label="Bu ou uriné en dehors" data-bilan-hors><button data-valeur="non" aria-pressed="true">Non</button><button data-valeur="oui" aria-pressed="false">Oui</button></div>
+</div>
+<button class="bouton principal" data-action="valider_bilan">Valider et passer au questionnaire</button>
+</div>
 <div class="carte primaire">
 <span class="sur-titre">Hydratation</span>
 <div class="tres-grand" data-v="res_bu">–</div>
@@ -530,8 +544,6 @@ button:disabled{opacity:.5}
 </div>
 <div class="question">Les rappels pour boire étaient-ils bien dosés ?</div>
 <div class="segment grille" role="group" aria-label="Les rappels étaient-ils bien dosés ?" data-retour="dosage"><button data-valeur="bien" aria-pressed="false">Oui, c'était bien</button><button data-valeur="trop_souvent" aria-pressed="false">Trop souvent</button><button data-valeur="pas_assez" aria-pressed="false">Pas assez souvent</button><button data-valeur="quantites" aria-pressed="false">Mauvaises quantités</button></div>
-<label class="champ">Distance réellement parcourue (facultatif)<span><input type="text" inputmode="decimal" data-retour-texte="distance"> km</span></label>
-<div class="texte2 petit">Si ta montre ou ton appli de course te la donne : HydroPerf en déduit ton allure moyenne.</div>
 <div class="question">D'autres remarques ?</div>
 <textarea class="saisie" data-retour-texte="remarques" maxlength="1000" rows="3" placeholder="Ce qui t'a plu, ce qui t'a gêné, ce qu'il faudrait changer…" aria-label="Autres remarques"></textarea>
 <div class="rangee"><button class="bouton secondaire" data-action="passer_retour">Passer</button><button class="bouton bleu" data-action="envoyer_retour">Envoyer</button></div>
@@ -712,7 +724,7 @@ function afficherAccueil() {
   } else {
     texte("meteo_temp", "–");
     texte("meteo_detail", "Pas de météo indiquée");
-    texte("meteo_source", "Indique la température ressentie en préparant ta sortie : sans elle, je ne tiens pas compte de la chaleur.");
+    texte("meteo_source", "Indique la température ressentie de ta prochaine sortie : elle est demandée pour démarrer.");
   }
 }
 
@@ -920,11 +932,10 @@ function afficherPreparation() {
   valeurChamp($('[data-champ="allure"]'), ecrireAllure(prep.allure));
   valeurChamp($('[data-champ="vitesse"]'), prep.vitesse || "");
   valeurChamp($('[data-champ="denivele"]'), prep.denivele || "");
-  // Ressenti : saisi à la main, ou « Je ne sais pas » (pas de correction météo)
+  // Ressenti : saisi à la main (obligatoire pour démarrer)
   const enF = imperial();
   valeurChamp($('[data-champ="ressenti"]'), prep.ressenti === null ? "" : enF ? Math.round(prep.ressenti * 9 / 5 + 32) : prep.ressenti);
   $$('[data-unite="temp"]').forEach(e => e.textContent = enF ? "°F" : "°C");
-  $("[data-ressenti-nsp]").setAttribute("aria-pressed", String(prep.ressenti === null));
   $("[data-si-pesees]").hidden = !(config && config.profil.pesees_actives);
   $('[data-champ="pesee"]').checked = !!prep.pesee;
   $$("[data-si-pesee]").forEach(e => e.hidden = !prep.pesee);
@@ -1302,9 +1313,22 @@ function afficherResume() {
   texte("res_bu", `${volume(tot.bu)} bus`);
   texte("res_bu_detail", `sur ${volume(tot.a_boire)} conseillés et ${volume(tot.perdue)} perdus en transpirant`);
   texte("res_poids", `À l'arrivée, tu as perdu environ ${nombre(tot.perte_poids)} % de ton poids en eau (à ne pas dépasser : 2 %).`);
-  texte("res_bouton_questionnaire", r.pesee ? "Questionnaire de fin et pesée" : "Questionnaire de fin de sortie");
-  // Un résumé rouvert depuis le tableau de bord n'a plus de questionnaire
-  $('[data-action="questionnaire_resume"]').hidden = !!r.depuisHistorique;
+  if (r.bu_saisi) texte("res_bu_detail", `(eau bue que tu as indiquée) sur ${volume(tot.a_boire)} conseillés et ${volume(tot.perdue)} perdus en transpirant`);
+  // Juste après la sortie : le bilan à vérifier, puis le questionnaire ; un résumé rouvert depuis le tableau de bord n'en a plus
+  const bilan = !!r.bilanAFaire && !r.depuisHistorique;
+  const carteBilan = $("[data-res-bilan]");
+  if (bilan && carteBilan.hidden) {
+    const mesuree = !r.mesures || r.mesures.vitesse;
+    $('[data-bilan="bu"]').value = Math.round(tot.bu);
+    $('[data-bilan="distance"]').value = mesuree ? String(r.km).replace(".", ",") : r.distance_prevue ? String(r.distance_prevue).replace(".", ",") : "";
+    texte("bilan_distance_aide", mesuree ? "Mesurée par ton capteur de vitesse : corrige si ta montre donne autre chose."
+      : "Sans capteur de vitesse, c'est la distance prévue : mets celle de ta montre ou de ton appli si tu la connais (HydroPerf en déduit ton allure moyenne).");
+    $('[data-bilan="poids_apres"]').value = "";
+    selectionner($("[data-bilan-hors]"), "non");
+  }
+  carteBilan.hidden = !bilan;
+  $("[data-bilan-pesee]").hidden = !(bilan && r.pesee);
+  $('[data-action="questionnaire_resume"]').hidden = !!r.depuisHistorique || bilan;
 
   const allure = v => v > 2 ? 3600 / v : null;
   // Sans capteur de vitesse, la distance et l'allure ne sont pas mesurées : on montre celles prévues
@@ -1318,7 +1342,7 @@ function afficherResume() {
     tot.fc_moy ? [`${tot.fc_moy}`, "bpm en moyenne"] : null,
     tot.p_moy ? [`${tot.p_moy} W`, "puissance moyenne"] : null,
     [`${tot.rappels}`, "alertes"],
-    [nombre(tot.rappels ? tot.bu / tot.rappels / g : 0), "gorgées par alerte en moyenne"],
+    [nombre(r.gorgees.length ? r.gorgees.reduce((a, x) => a + x[1], 0) / r.gorgees.length / g : 0), "gorgées par alerte en moyenne"],
     [`${tot.sodium_perdu} mg`, `sodium perdu (${tot.sodium_apporte} mg apportés)`],
     [`${tot.glucides} g`, "glucides apportés"],
   ].filter(Boolean);
@@ -1585,7 +1609,6 @@ function lireRetour() {
     raison_autre: aBu === "oui" ? "" : $('[data-retour-texte="raison_autre"]', d).value.trim(),
     dosage: choisi("dosage"),
     remarques: $('[data-retour-texte="remarques"]', d).value.trim(),
-    distance: lireNombre($('[data-retour-texte="distance"]', d).value),
     pesee: !$("[data-retour-pesee]", d).hidden && apres > 0
       ? {poids_apres: apres, bu: lireNombre($('[data-pesee="bu"]', d).value), hors: choisi("hors") === "oui"} : undefined,
   };
@@ -1598,6 +1621,10 @@ const ACTIONS = {
     aller("sortie");
   },
   async demarrer() {
+    if (prep && prep.ressenti == null) {
+      alert("Indique la température ressentie de ta sortie (celle de ton appli météo) avant de démarrer.");
+      return $('[data-champ="ressenti"]').focus();
+    }
     await action("/api/sortie/demarrer", configEnvoyee());
     dernierRappel = null;
     if (prep) { prep.pesee = false; afficherPreparation(); }  // la pesée ne vaut que pour cette sortie
@@ -1613,14 +1640,15 @@ const ACTIONS = {
     const h = historique[historique.length - 1];
     const recente = h && Math.abs(h.duree - duree) <= 5 ? h : null;
     if (recente && recente.resume) {
-      // Le résumé de la sortie, puis le questionnaire par-dessus
-      resume = Object.assign(recente.resume, {pesee});
+      // Le résumé de la sortie avec le bilan à vérifier (eau bue, distance, pesée), puis le questionnaire
+      resume = Object.assign(recente.resume, {pesee, bilanAFaire: true});
       window.scrollTo(0, 0);
       afficherResume();
     } else {
+      // Historique désactivé : pas de résumé, directement le questionnaire (avec la pesée)
       aller("accueil");
+      if (!etat.active && !etat.horsLigne) ouvrirRetour(pesee, null, null);
     }
-    if (!etat.active && !etat.horsLigne) ouvrirRetour(pesee, recente, resume && resume.totaux ? resume.totaux.bu : null);
   },
   async simuler_tout() {
     if (!confirm("Simuler la fin de la sortie d'un coup ? Elle sera terminée et tu verras son résumé.")) return;
@@ -1630,8 +1658,8 @@ const ACTIONS = {
     } catch (e) {
       return horsLigne();
     }
-    resume.pesee = pesee;  // le questionnaire du résumé demandera alors le poids après
-    resume.questionnaire = false;
+    resume.pesee = pesee;  // le bilan demandera alors le poids après
+    resume.bilanAFaire = true;
     await rafraichir();
     await chargerHistorique().catch(() => {});
     window.scrollTo(0, 0);
@@ -1640,12 +1668,12 @@ const ACTIONS = {
   // Météo saisie à la main : pour la prochaine sortie, ou pendant la sortie en cours
   async changer_meteo() {
     const actuel = etat.active ? etat.ressenti : prep && prep.ressenti;
-    const reponse = prompt("Température ressentie (°C). Laisse vide si tu ne sais pas.", actuel != null ? String(actuel) : "");
-    if (reponse === null) return;
-    const valeur = reponse.trim() ? Math.round(lireNombre(reponse)) : null;
+    const reponse = prompt("Température ressentie (°C), celle de ton appli météo.", actuel != null ? String(actuel) : "");
+    if (reponse === null || isNaN(parseFloat(reponse.replace(",", ".")))) return;
+    const valeur = Math.max(-20, Math.min(50, Math.round(lireNombre(reponse))));
     if (etat.active) {
       try {
-        await api("/api/sortie/meteo", {ressenti: valeur === null ? "nsp" : valeur});
+        await api("/api/sortie/meteo", {ressenti: valeur});
       } catch (e) {
         return horsLigne();
       }
@@ -1656,11 +1684,41 @@ const ACTIONS = {
     afficherPreparation();
     afficherAccueil();
   },
-  // Questionnaire de fin (et pesée) depuis le résumé d'une sortie simulée
+  // Questionnaire de fin depuis le résumé (la pesée est dans le bilan)
   questionnaire_resume() {
     if (!resume) return;
     const h = historique[historique.length - 1];
-    ouvrirRetour(resume.pesee, h && Math.abs(h.duree - resume.duree) <= 5 ? h : null, resume.totaux.bu);
+    ouvrirRetour(false, h && Math.abs(h.duree - resume.duree) <= 5 ? h : null, resume.totaux.bu);
+  },
+  // Bilan vérifié : eau vraiment bue, distance et pesée, puis le questionnaire
+  async valider_bilan() {
+    if (!resume) return;
+    const c = $("[data-res-bilan]");
+    const champ = cle => $(`[data-bilan="${cle}"]`, c).value.trim();
+    const corps = {};
+    if (champ("bu")) corps.bu = Math.round(lireNombre(champ("bu")));
+    if (champ("distance")) corps.distance = lireNombre(champ("distance"));
+    if (resume.pesee) {
+      const apres = lireNombre(champ("poids_apres"));
+      if (!apres) return alert("Indique ton poids après la sortie (ou décoche la pesée la prochaine fois).");
+      corps.pesee = {poids_apres: apres, hors: $('[data-bilan-hors] [aria-pressed="true"]', c)?.dataset.valeur === "oui"};
+    }
+    let r;
+    try {
+      r = await api("/api/sortie/bilan", corps);
+    } catch (e) {
+      return alert("Impossible d'enregistrer le bilan, le boîtier ne répond pas.");
+    }
+    await chargerHistorique().catch(() => {});
+    const h = historique[historique.length - 1];
+    if (h && h.resume && Math.abs(h.duree - resume.duree) <= 5) resume = Object.assign(h.resume, {pesee: false});
+    else Object.assign(resume, {pesee: false, bilanAFaire: false});
+    afficherResume();
+    if (r && r.pesee) {
+      alert(r.pesee.erreur ? `Pesée non prise en compte : ${r.pesee.erreur}.` : messagePesee(r.pesee));
+      chargerConfig().catch(() => {});
+    }
+    ouvrirRetour(false, h && Math.abs(h.duree - resume.duree) <= 5 ? h : null, resume.totaux.bu);
   },
   fermer_resume() {
     resume = null;
@@ -1672,7 +1730,7 @@ const ACTIONS = {
   },
   async envoyer_retour() {
     const r = lireRetour();
-    if (!r.a_bu && !r.dosage && !r.remarques && !r.pesee && !r.distance) {
+    if (!r.a_bu && !r.dosage && !r.remarques && !r.pesee) {
       return alert("Réponds à au moins une question, ou appuie sur Passer.");
     }
     let reponse;
@@ -1683,15 +1741,6 @@ const ACTIONS = {
     }
     $("#retour").close();
     chargerRetours().catch(() => {});
-    // Distance donnée : le résumé affiché et l'historique ont maintenant la vraie distance et l'allure moyenne
-    if (r.distance > 0) {
-      await chargerHistorique().catch(() => {});
-      const h = historique[historique.length - 1];
-      if (resume && h && h.resume && Math.abs(h.duree - resume.duree) <= 5) {
-        resume = Object.assign(h.resume, {pesee: resume.pesee});
-        afficherResume();
-      }
-    }
     if (reponse && reponse.pesee) {
       const p = reponse.pesee;
       alert(p.erreur ? `Pesée non prise en compte : ${p.erreur}.` : messagePesee(p));
@@ -1707,7 +1756,7 @@ const ACTIONS = {
     if (!retours.length) return alert("Aucun retour pour l'instant.");
     const colonnes = ["date", "sport", "seance", "duree_min", "bu_ml", "objectif_ml", "alertes",
       "a_bu_comme_demande", "raisons", "precision", "rappels_bien_doses", "remarques",
-      "pesee_poids_avant", "pesee_poids_apres", "pesee_sueur_l_h"];
+      "pesee_poids_avant", "pesee_poids_apres", "pesee_sueur_l_h", "eau_vraiment_bue_ml", "distance_reelle_km"];
     const lignes = retours.map(r => {
       const sortie = r.sortie || {};
       const date = r.date || sortie.debut;
@@ -1718,6 +1767,7 @@ const ACTIONS = {
         A_BU[r.a_bu] || r.a_bu, (r.raisons || []).map(x => RAISONS[x] || x).join(", "), r.raison_autre,
         DOSAGES[r.dosage] || r.dosage, r.remarques,
         r.pesee && r.pesee.poids_avant, r.pesee && r.pesee.poids_apres, r.pesee && (r.pesee.sueur ?? r.pesee.erreur),
+        r.bu_reel, r.distance_reelle,
       ].map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(";");
     });
     const csv = "\ufeff" + [colonnes.join(";"), ...lignes].join("\n");
@@ -1892,6 +1942,10 @@ document.addEventListener("click", ev => {
     if (c) chargerPreparation(c);
     return;
   }
+  if ((el = t.closest("[data-bilan-hors] button[data-valeur]"))) {
+    selectionner(el.closest("[data-bilan-hors]"), el.dataset.valeur);
+    return;
+  }
   // Questionnaire de fin de sortie : un seul choix par question, plusieurs pour "Pourquoi ?"
   if ((el = t.closest("#retour [data-retour] button[data-valeur]"))) {
     const groupe = el.closest("[data-retour]");
@@ -1942,12 +1996,6 @@ document.addEventListener("click", ev => {
     b.glucides = connue ? -1 : b.type === "isotonique" || (b.type === "maison" && b.sucre) ? 60 : 0;
     return afficherPreparation();
   }
-  if ((el = t.closest("[data-ressenti-nsp]")) && prep) {
-    prep.ressenti = null;
-    $('[data-champ="ressenti"]').value = "";
-    afficherAccueil();
-    return afficherPreparation();
-  }
 
   // Onglet Test : choix des barres et de la boisson
   if ((el = t.closest("[data-test] button[data-valeur]"))) return selectionner(el.closest("[data-test]"), el.dataset.valeur);
@@ -1993,7 +2041,6 @@ document.addEventListener("input", ev => {
   else if (el.dataset.champ === "ressenti") {
     const v = parseFloat(el.value.replace(",", "."));
     prep.ressenti = isNaN(v) ? null : Math.round(imperial() ? (v - 32) * 5 / 9 : v);
-    $("[data-ressenti-nsp]").setAttribute("aria-pressed", String(prep.ressenti === null));
     afficherAccueil();
   }
   else if (el.dataset.champ === "poids_avant") prep.poids_avant = lireNombre(el.value);
