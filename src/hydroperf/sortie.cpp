@@ -34,7 +34,7 @@ static const int INTERVALLE_MIN = 5 * 60;           // secondes minimum entre de
 static const int INTERVALLE_MAX = 20 * 60;          // rappel de sécurité
 // Gorgées visées par alerte selon l'intensité : plus l'effort est dur, plus on boit par petites quantités
 // (l'estomac se vide moins vite et on a du mal à avaler en soufflant fort)
-static const float R_EFFORT_FACILE = 0.9, R_EFFORT_DUR = 1.1;
+static const float R_EFFORT_DUR = 1.1;
 // GORGEES_MAX (3, les barres de l'écran) vient de ecran.h
 static const int ATTENTE_RECUP_MAX = 15 * 60;       // en course, on attend la récup si elle arrive dans 15 min
 static const int ATTENTE_RECUP_VELO = 5 * 60;       // à vélo on peut boire en roulant : 5 min au plus
@@ -133,11 +133,10 @@ static float sodiumCibleMgL() {
   return SODIUM_CIBLE_NSP;
 }
 
-// Gorgées visées par alerte : 3 à faible effort, 2 à effort moyen, 1 à effort dur
+// Gorgées visées par alerte : 2, ou 1 à effort dur. 3 seulement pour rattraper un retard
+// (alerte repoussée pendant une fraction, ou besoin plus rapide que prévu)
 static int gorgeesVisees(float rEffort) {
-  if (rEffort < R_EFFORT_FACILE) return 3;
-  if (rEffort <= R_EFFORT_DUR) return 2;
-  return 1;
+  return rEffort > R_EFFORT_DUR ? 1 : 2;
 }
 
 // ---------- Calibration : S_base, AT_ref et k, avec les pesées de l'utilisateur ----------

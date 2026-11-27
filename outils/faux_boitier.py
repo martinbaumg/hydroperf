@@ -29,7 +29,7 @@ PART_MIN, PART_MAX, PART_SANS_DUREE = 0.5, 0.8, 0.6
 PLAFOND, PLAFOND_PESEES = 0.8, 1.0
 INTERVALLE_MIN, INTERVALLE_MAX = 5 * 60, 20 * 60
 GORGEES_MAX = 3
-R_EFFORT_FACILE, R_EFFORT_DUR = 0.9, 1.1   # 3 gorgées visées en dessous, 1 au-dessus, 2 entre
+R_EFFORT_DUR = 1.1   # 1 gorgée visée au-dessus, 2 en dessous (3 seulement pour rattraper un retard)
 ATTENTE_RECUP_MAX = 15 * 60
 SODIUM_CIBLE = {"non": 460, "nsp": 575, "oui": 690}   # mg/L bus : fourchette de l'ACSM (20-30 mmol/L)
 GLUCIDES_MAX_H, GLUCIDES_AVANCE = 60, 15
@@ -124,7 +124,7 @@ def sodium_cible():
 
 
 def gorgees_visees(r_effort):
-    return 3 if r_effort < R_EFFORT_FACILE else 2 if r_effort <= R_EFFORT_DUR else 1
+    return 1 if r_effort > R_EFFORT_DUR else 2
 
 
 # ---------- Calibration ----------

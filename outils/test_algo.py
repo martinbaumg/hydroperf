@@ -152,8 +152,8 @@ def test_glucides_par_heure():
 
 
 def test_gorgees_selon_l_effort():
-    """3 gorgées visées à faible effort, 2 à effort moyen, 1 à effort dur : un fractionné les donne toutes."""
-    assert (fb.gorgees_visees(0.8), fb.gorgees_visees(1.0), fb.gorgees_visees(1.3)) == (3, 2, 1)
+    """2 gorgées visées, 1 à effort dur ; 3 seulement pour rattraper le retard d'une fraction."""
+    assert (fb.gorgees_visees(0.8), fb.gorgees_visees(1.0), fb.gorgees_visees(1.3)) == (2, 2, 1)
     reinitialiser(poids=70, ftp=250, fc_repos=50, fc_max=190, capteur_puissance=True, sel="oui")
     s = sortie({"sport": "velo", "seance": "fractionne", "ressenti": 28, "vitesse": 28,
                 "detail": {"echauffement_min": 20, "repetitions": 3, "effort_s": 600, "recup_s": 180,
