@@ -138,8 +138,8 @@ def s_base_defaut(fam):
 def calibration(fam):
     c = {"s_base": s_base_defaut(fam), "at_ref": AT_REF_DEFAUT, "k": K_DEFAUT, "pesees": 0, "k_personnel": False}
     pesees = profil["pesees"]
-    for p in pesees:
-        if p.get("at") is not None:
+    for p in pesees:  # AT_ref : ressenti de la première pesée de ce sport (24 °C sans pesée)
+        if p["f"] == fam and p.get("at") is not None:
             c["at_ref"] = p["at"]
             break
     num = den = 0
@@ -176,7 +176,7 @@ def calibration_etat():
     o = {}
     for fam in ("course", "velo"):
         c = calibration(fam)
-        o[fam] = {"s_base": arrondi(c["s_base"], 0.01), "pesees": c["pesees"]}
+        o[fam] = {"s_base": arrondi(c["s_base"], 0.01), "pesees": c["pesees"], "at_ref": arrondi(c["at_ref"], 0.1)}
         o.update(at_ref=arrondi(c["at_ref"], 0.1), k=arrondi(c["k"], 0.001), k_personnel=c["k_personnel"])
     o.update(pesees=len(profil["pesees"]), sodium_sueur=sodium_sueur(), sodium_cible=sodium_cible(), p_ref=round(puissance_ref()))
     return o

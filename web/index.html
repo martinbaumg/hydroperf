@@ -1057,7 +1057,7 @@ function afficherLive() {
     ? `Rythme actuel : ${pluriel(e.plan.gorgees, "gorgée")} toutes les ${e.plan.intervalle} min. L'objectif s'ajuste à ton effort et à la chaleur. On part du principe que tu bois à chaque consigne.`
     : "");
   const gorgee = config ? config.reglages.gorgee : 30;
-  texte("pourquoi", e.calcul ? `${explication(e.calcul)} En retard : ${volume(e.calcul.compteur)} ; je te préviens dès 2 gorgées (${volume(2 * gorgee)}), au moins 5 min après la dernière alerte et au plus tard au bout de 20 min.` : "");
+  texte("pourquoi", e.calcul ? `${explication(e.calcul)} En retard : ${volume(e.calcul.compteur)} ; je te préviens dès ${pluriel(e.plan.gorgees, "gorgée")} (${volume(e.plan.gorgees * gorgee)}, selon ton effort), au moins 5 min après la dernière alerte et au plus tard au bout de 20 min.` : "");
   texte("live_objectif", e.duree_prevue ? `objectif ${volume(e.objectif)}` : `objectif du moment : ${volume(e.objectif)}`);
   $("[data-barre]").style.width = `${Math.min(100, ratio * 100)}%`;
   texte("fc", e.fc ?? "–");
@@ -1433,8 +1433,9 @@ function afficherConfig() {
   texte("profil_sel", TRACES_SEL[profil.sel] || TRACES_SEL.nsp);
   const cal = config.calibration;
   if (cal) {
-    texte("profil_sueur", `Course : ${nombre(cal.course.s_base, 2)} L/h · Vélo : ${nombre(cal.velo.s_base, 2)} L/h, `
-      + `pour une sortie longue à ${temperature(cal.at_ref)} ressentis.`);
+    const aRef = (f) => temperature(cal[f].at_ref ?? cal.at_ref);
+    texte("profil_sueur", `Course : ${nombre(cal.course.s_base, 2)} L/h à ${aRef("course")} · Vélo : ${nombre(cal.velo.s_base, 2)} L/h à ${aRef("velo")} `
+      + `ressentis, pour une sortie longue.`);
     texte("profil_sueur_source", cal.pesees
       ? `Calculée avec ${pluriel(cal.pesees, "pesée")}. Effet de la chaleur : +${nombre(cal.k * 100)} % par degré`
         + `${cal.k_personnel ? ", calculé avec tes pesées." : " (valeur par défaut : il faut deux pesées à au moins 8 °C d'écart pour le personnaliser)."}`

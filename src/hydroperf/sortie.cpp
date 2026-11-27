@@ -12,7 +12,7 @@
 //
 //   Sueur    = min(S_base × R_effort × R_météo, 2,5 L/h)
 //   À boire  = min(f × Sueur, plafond)       f selon la durée prévue, entre 0,5 et 0,8
-//   Compteur += À boire chaque seconde ; alerte dès 2 gorgées (au moins 5 min après la
+//   Compteur += À boire chaque seconde ; alerte dès 1 à 3 gorgées selon l'effort (au moins 5 min après la
 //   précédente) ou au bout de 20 min ; N = min(3, ⌊compteur / gorgée⌋) gorgées, au moins 1.
 // =====================================================================================
 
@@ -162,9 +162,9 @@ static Calibration calibration(const char* fam) {
   Calibration c{sBaseParDefaut(fam), AT_REF_DEFAUT, K_DEFAUT, 0, false};
   JsonArrayConst pesees = profil["pesees"].as<JsonArrayConst>();
 
-  // AT_ref : ressenti de la première pesée qui en a un
+  // AT_ref : ressenti de la première pesée de ce sport qui en a un (24 °C sans pesée)
   for (JsonObjectConst p : pesees) {
-    if (!p["at"].isNull()) { c.atRef = p["at"]; break; }
+    if (strcmp(p["f"] | "", fam) == 0 && !p["at"].isNull()) { c.atRef = p["at"]; break; }
   }
 
   // k : pente de ln(sueur) en fonction du ressenti, calculée dans chaque famille (vélo / course)
@@ -213,6 +213,7 @@ void calibrationEtat(JsonObject o) {
     JsonObject f = o[fam].to<JsonObject>();
     f["s_base"] = arrondi(c.sBase, 0.01);
     f["pesees"] = c.nbPesees;
+    f["at_ref"] = arrondi(c.atRef, 0.1);
     o["at_ref"] = arrondi(c.atRef, 0.1);
     o["k"] = arrondi(c.k, 0.001);
     o["k_personnel"] = c.kPersonnel;

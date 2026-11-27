@@ -66,6 +66,15 @@ def test_calibration_k():
     assert fb.calibration("course")["k"] == 0.03
 
 
+def test_reference_par_sport():
+    """Une pesée de course à 13 °C ne change pas la température de référence du vélo (24 °C)."""
+    reinitialiser(pesees=[{"f": "course", "s": 1.0, "at": 13, "fiable": True}])
+    assert fb.calibration("course")["at_ref"] == 13
+    cal = fb.calibration("velo")
+    assert cal["at_ref"] == 24 and cal["pesees"] == 0
+    proche(fb.r_meteo(28, cal), 1.13)
+
+
 def test_sans_meteo_ni_duree():
     reinitialiser()
     cal = fb.calibration("course")
